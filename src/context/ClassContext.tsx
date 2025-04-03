@@ -2,7 +2,7 @@
 import React, { createContext, useState, useContext, useEffect } from "react";
 import { Class } from "@/types/user";
 import { useAuth } from "./AuthContext";
-import { toast } from "@/components/ui/sonner";
+import { toast } from "sonner";
 
 interface ClassContextType {
   classes: Class[];
