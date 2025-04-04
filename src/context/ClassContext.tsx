@@ -61,6 +61,12 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     if (user && profile) {
       loadUserData();
+    } else {
+      // Reset data when not authenticated
+      setClasses([]);
+      setAssignments([]);
+      setSubmissions([]);
+      setLoading(false);
     }
   }, [user, profile]);
 
@@ -69,45 +75,88 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     
     try {
       setLoading(true);
-      // Load classes
-      let { data: classesData, error: classesError } = await supabase
-        .from('classes')
-        .select('*');
+      console.log("Loading classes data for user:", user.id, "with role:", profile?.role);
       
-      if (classesError) throw classesError;
-      
-      if (classesData) {
-        const transformedClasses: Class[] = classesData.map(c => ({
-          id: c.id,
-          name: c.name,
-          code: c.class_code,
-          teacherId: c.teacher_id,
-          students: [] // Will be populated later
-        }));
+      // For teachers, fetch their classes
+      if (profile?.role === 'teacher') {
+        const { data: teacherClasses, error: teacherClassesError } = await supabase
+          .from('classes')
+          .select('*')
+          .eq('teacher_id', user.id);
         
-        setClasses(transformedClasses);
-        
-        // Load students for classes
-        if (profile?.role === 'teacher') {
+        if (teacherClassesError) {
+          console.error('Error loading teacher classes:', teacherClassesError);
+        } else if (teacherClasses) {
+          console.log("Teacher classes loaded:", teacherClasses.length);
+          const transformedClasses = teacherClasses.map(c => ({
+            id: c.id,
+            name: c.name,
+            code: c.class_code,
+            teacherId: c.teacher_id,
+            students: []
+          }));
+          
+          setClasses(transformedClasses);
+          
+          // Load students for each class
           for (const cls of transformedClasses) {
             const { data: studentsData, error: studentsError } = await supabase
               .from('students_classes')
               .select('student_id')
               .eq('class_id', cls.id);
               
-            if (!studentsError && studentsData) {
+            if (studentsError) {
+              console.error('Error loading students for class:', cls.id, studentsError);
+            } else if (studentsData) {
               cls.students = studentsData.map(s => s.student_id);
             }
           }
         }
+      } 
+      // For students, fetch classes they are enrolled in
+      else if (profile?.role === 'student') {
+        const { data: enrollments, error: enrollmentsError } = await supabase
+          .from('students_classes')
+          .select('class_id')
+          .eq('student_id', user.id);
         
-        // Load assignments (can implement this when needed)
-        // For now, use mock data
-        // Similar for submissions
+        if (enrollmentsError) {
+          console.error('Error loading student enrollments:', enrollmentsError);
+        } else if (enrollments && enrollments.length > 0) {
+          const classIds = enrollments.map(e => e.class_id);
+          console.log("Student is enrolled in classes:", classIds);
+          
+          const { data: studentClasses, error: studentClassesError } = await supabase
+            .from('classes')
+            .select('*')
+            .in('id', classIds);
+          
+          if (studentClassesError) {
+            console.error('Error loading student classes:', studentClassesError);
+          } else if (studentClasses) {
+            console.log("Student classes loaded:", studentClasses.length);
+            const transformedClasses = studentClasses.map(c => ({
+              id: c.id,
+              name: c.name,
+              code: c.class_code,
+              teacherId: c.teacher_id,
+              students: [user.id]
+            }));
+            
+            setClasses(transformedClasses);
+          }
+        } else {
+          console.log("Student is not enrolled in any classes");
+          setClasses([]);
+        }
       }
+      
+      // For now, use mock data for assignments and submissions
+      // Later this can be updated to fetch from Supabase
+      // For mock data generation, we'll use the existing pattern in useEffects below
     } catch (error) {
       console.error('Error loading user data:', error);
-      toast('Error loading data');
+      toast.error('Error loading data');
     } finally {
       setLoading(false);
     }
@@ -142,11 +191,11 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         };
         
         setClasses(prevClasses => [...prevClasses, newClass]);
-        toast(`Class created with code: ${code}`);
+        toast.success(`Class created with code: ${code}`);
       }
     } catch (error: any) {
       console.error('Error creating class:', error);
-      toast('Error creating class', {
+      toast.error('Error creating class', {
         description: error.message
       });
     }
@@ -156,6 +205,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!user) return false;
 
     try {
+      console.log("Attempting to join class with code:", code);
       // Find the class with this code
       const { data: classData, error: classError } = await supabase
         .from('classes')
@@ -164,8 +214,9 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .single();
       
       if (classError) {
+        console.error('Error finding class with code:', code, classError);
         if (classError.code === 'PGRST116') {
-          toast("Class not found", {
+          toast.error("Class not found", {
             description: "Please check the class code and try again."
           });
         } else {
@@ -174,6 +225,8 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return false;
       }
       
+      console.log("Found class:", classData);
+      
       // Check if already joined
       const { data: existingData, error: existingError } = await supabase
         .from('students_classes')
@@ -181,13 +234,17 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .eq('class_id', classData.id)
         .eq('student_id', user.id);
       
-      if (existingError) throw existingError;
+      if (existingError) {
+        console.error('Error checking existing enrollment:', existingError);
+        throw existingError;
+      }
       
       if (existingData && existingData.length > 0) {
-        toast("Already joined", {
+        console.log("Student already enrolled in class");
+        toast.info("Already joined", {
           description: "You are already a member of this class."
         });
-        return false;
+        return true; // Return true because technically they are in the class
       }
       
       // Join the class
@@ -198,7 +255,12 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           student_id: user.id
         });
       
-      if (joinError) throw joinError;
+      if (joinError) {
+        console.error('Error joining class:', joinError);
+        throw joinError;
+      }
+      
+      console.log("Successfully joined class");
       
       // Update local classes data
       const classToJoin = classes.find(c => c.id === classData.id);
@@ -227,11 +289,11 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setClasses(prevClasses => [...prevClasses, newClass]);
       }
       
-      toast("Class joined successfully!");
+      toast.success("Class joined successfully!");
       return true;
     } catch (error: any) {
       console.error('Error joining class:', error);
-      toast('Error joining class', {
+      toast.error('Error joining class', {
         description: error.message
       });
       return false;
@@ -326,12 +388,13 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     toast("Feedback saved successfully");
   };
 
-  // New function to upload audio to Supabase storage
+  // Updated uploadAudio to store files in Supabase storage
   const uploadAudio = async (assignmentId: string, questionId: number, audioBlob: Blob): Promise<string | null> => {
     if (!user) return null;
     
     try {
       const filePath = `${user.id}/${assignmentId}/${questionId}_${Date.now()}.webm`;
+      console.log("Uploading audio file to path:", filePath);
       
       const { data, error } = await supabase
         .storage
@@ -341,7 +404,10 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           upsert: true
         });
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error uploading audio to storage:', error);
+        throw error;
+      }
       
       if (data) {
         // Get the public URL for the uploaded file
@@ -350,13 +416,14 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           .from('audio_recordings')
           .getPublicUrl(data.path);
         
+        console.log("File uploaded successfully. Public URL:", publicUrlData.publicUrl);
         return publicUrlData.publicUrl;
       }
       
       return null;
     } catch (error: any) {
       console.error('Error uploading audio:', error);
-      toast('Error uploading audio', {
+      toast.error('Error uploading audio', {
         description: error.message
       });
       return null;

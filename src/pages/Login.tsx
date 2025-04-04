@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -15,14 +15,22 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("student");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const { login } = useAuth();
+  const { login, user, profile, isLoading } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect to the right dashboard if the user is already authenticated
+  useEffect(() => {
+    if (!isLoading && user && profile) {
+      console.log("User is authenticated, redirecting to dashboard:", profile.role);
+      navigate(profile.role === "teacher" ? "/teacher" : "/student");
+    }
+  }, [isLoading, user, profile, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!email || !password) {
-      toast("Missing fields", {
+      toast.error("Missing fields", {
         description: "Please fill in all fields."
       });
       return;
@@ -32,8 +40,7 @@ const Login = () => {
     
     try {
       await login(email, password);
-      // Navigation will happen automatically via the auth state change in App.tsx
-      toast("Login successful");
+      // The navigation will happen via the useEffect when auth state changes
     } catch (error) {
       console.error("Login error:", error);
       // Error toast will be shown in the login function
@@ -41,6 +48,22 @@ const Login = () => {
       setIsLoggingIn(false);
     }
   };
+
+  // If page is still loading auth state, show a loading indicator
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <h2 className="text-xl font-medium mb-2">Loading...</h2>
+        </div>
+      </div>
+    );
+  }
+
+  // If already logged in, don't show login form
+  if (user && profile) {
+    return null; // The useEffect will handle the redirection
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
