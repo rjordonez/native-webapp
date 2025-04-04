@@ -13,9 +13,20 @@ import { formatDistanceToNow } from "date-fns";
 const AssignmentDetails = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { assignments, submissions, getSubmissionsByAssignment, getAssignmentStats } = useClass();
+  const { assignments, getSubmissionsByAssignment, getAssignmentStats, loading } = useClass();
   
   const assignment = assignments.find(a => a.id === id);
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <AppNavbar />
+        <main className="flex-1 container py-8 flex items-center justify-center">
+          <p>Loading...</p>
+        </main>
+      </div>
+    );
+  }
   
   if (!assignment) {
     return (

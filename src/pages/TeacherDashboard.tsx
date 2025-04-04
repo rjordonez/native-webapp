@@ -8,7 +8,7 @@ import { PlusCircle, Users, BookOpen, CheckCircle } from "lucide-react";
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
-  const { getClassesByUser, getAssignmentsByClass, getAssignmentStats } = useClass();
+  const { getClassesByUser, getAssignmentsByClass, getAssignmentStats, loading } = useClass();
   const classes = getClassesByUser();
 
   return (
@@ -26,7 +26,11 @@ const TeacherDashboard = () => {
           </div>
         </div>
         
-        {classes.length === 0 ? (
+        {loading ? (
+          <div className="flex justify-center items-center h-64">
+            <p>Loading...</p>
+          </div>
+        ) : classes.length === 0 ? (
           <div className="bg-muted/40 rounded-lg p-12 text-center">
             <h2 className="text-2xl font-medium mb-2">No classes created yet</h2>
             <p className="text-muted-foreground mb-6">Create your first class to get started.</p>

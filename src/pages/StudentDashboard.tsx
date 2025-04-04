@@ -1,4 +1,3 @@
-
 import { useNavigate } from "react-router-dom";
 import { useClass } from "@/context/ClassContext";
 import { useAuth } from "@/context/AuthContext";
@@ -12,7 +11,7 @@ import { formatDistanceToNow } from "date-fns";
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { getClassesByUser, assignments, submissions } = useClass();
+  const { getClassesByUser, assignments, submissions, loading } = useClass();
   
   const classes = getClassesByUser();
   
@@ -67,6 +66,17 @@ const StudentDashboard = () => {
         return null;
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <AppNavbar />
+        <main className="flex-1 container py-8 flex items-center justify-center">
+          <p>Loading...</p>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">

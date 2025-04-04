@@ -28,10 +28,12 @@ const JoinClass = () => {
     try {
       const success = await joinClass(classCode);
       if (success) {
+        toast.success("Successfully joined class!");
         navigate("/student");
       }
     } catch (error) {
       console.error("Failed to join class:", error);
+      toast.error("Failed to join class. Please try again.");
     } finally {
       setIsJoining(false);
     }

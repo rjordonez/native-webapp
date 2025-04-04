@@ -9,7 +9,7 @@ interface AppNavbarProps {
 }
 
 const AppNavbar: React.FC<AppNavbarProps> = ({ showActions = true }) => {
-  const { user, logout } = useAuth();
+  const { user, profile, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -23,10 +23,10 @@ const AppNavbar: React.FC<AppNavbarProps> = ({ showActions = true }) => {
         <div className="flex items-center gap-2">
           <Link to="/" className="text-xl font-bold">ClassConnect</Link>
         </div>
-        {showActions && user && (
+        {showActions && user && profile && (
           <div className="flex items-center gap-4">
             <div className="font-medium">
-              {user.name} • {user.role === "teacher" ? "Teacher" : "Student"}
+              {profile.name} • {profile.role === "teacher" ? "Teacher" : "Student"}
             </div>
             <Button variant="outline" onClick={handleLogout}>
               Logout

@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, useEffect } from "react";
 import { Class, Assignment, Submission, mockStudents, mockTopics, mockQuestions } from "@/types/user";
 import { useAuth } from "./AuthContext";
@@ -9,9 +8,10 @@ interface ClassContextType {
   classes: Class[];
   assignments: Assignment[];
   submissions: Submission[];
+  loading: boolean;
   createClass: (name: string) => Promise<void>;
   joinClass: (code: string) => Promise<boolean>;
-  getClassesByUser: () => Promise<Class[]>;
+  getClassesByUser: () => Class[];
   createAssignment: (
     classId: string, 
     title: string, 
@@ -19,8 +19,8 @@ interface ClassContextType {
     topic: string, 
     questions: string[]
   ) => Promise<void>;
-  getAssignmentsByClass: (classId: string) => Promise<Assignment[]>;
-  getSubmissionsByAssignment: (assignmentId: string) => Promise<Submission[]>;
+  getAssignmentsByClass: (classId: string) => Assignment[];
+  getSubmissionsByAssignment: (assignmentId: string) => Submission[];
   getAssignmentStats: (assignmentId: string) => { 
     total: number; 
     submitted: number; 
@@ -36,12 +36,13 @@ const ClassContext = createContext<ClassContextType>({
   classes: [],
   assignments: [],
   submissions: [],
+  loading: true,
   createClass: async () => {},
   joinClass: async () => false,
-  getClassesByUser: async () => [],
+  getClassesByUser: () => [],
   createAssignment: async () => {},
-  getAssignmentsByClass: async () => [],
-  getSubmissionsByAssignment: async () => [],
+  getAssignmentsByClass: () => [],
+  getSubmissionsByAssignment: () => [],
   getAssignmentStats: () => ({ total: 0, submitted: 0, inProgress: 0, notStarted: 0 }),
   updateSubmission: async () => {},
   updateSubmissionFeedback: async () => {},
@@ -54,6 +55,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [classes, setClasses] = useState<Class[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const { user, profile } = useAuth();
 
   useEffect(() => {
@@ -66,6 +68,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!user) return;
     
     try {
+      setLoading(true);
       // Load classes
       let { data: classesData, error: classesError } = await supabase
         .from('classes')
@@ -105,6 +108,8 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (error) {
       console.error('Error loading user data:', error);
       toast('Error loading data');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -234,55 +239,10 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   // Helper function to fetch classes by user role (teacher or student)
-  const getClassesByUser = async (): Promise<Class[]> => {
-    if (!user || !profile) return [];
-    
-    try {
-      if (profile.role === 'teacher') {
-        const { data, error } = await supabase
-          .from('classes')
-          .select('*')
-          .eq('teacher_id', user.id);
-        
-        if (error) throw error;
-        
-        if (data) {
-          return data.map(c => ({
-            id: c.id,
-            name: c.name,
-            code: c.class_code,
-            teacherId: c.teacher_id,
-            students: [],  // Can load this separately if needed
-          }));
-        }
-      } else {
-        // For students
-        const { data, error } = await supabase
-          .from('students_classes')
-          .select('class_id, classes(*)')
-          .eq('student_id', user.id);
-        
-        if (error) throw error;
-        
-        if (data) {
-          return data.map(item => ({
-            id: item.classes.id,
-            name: item.classes.name,
-            code: item.classes.class_code,
-            teacherId: item.classes.teacher_id,
-            students: [], // Not needed for student view
-          }));
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching classes:', error);
-    }
-    
-    return [];
+  const getClassesByUser = (): Class[] => {
+    return classes;
   };
 
-  // For now, we'll use the mock data for assignments and submissions
-  // These functions can be updated later to use Supabase
   const createAssignment = async (
     classId: string, 
     title: string, 
@@ -323,11 +283,11 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     toast("Assignment created successfully");
   };
 
-  const getAssignmentsByClass = async (classId: string): Promise<Assignment[]> => {
+  const getAssignmentsByClass = (classId: string): Assignment[] => {
     return assignments.filter(a => a.classId === classId);
   };
 
-  const getSubmissionsByAssignment = async (assignmentId: string): Promise<Submission[]> => {
+  const getSubmissionsByAssignment = (assignmentId: string): Submission[] => {
     return submissions.filter(s => s.assignmentId === assignmentId);
   };
 
@@ -488,6 +448,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         classes, 
         assignments, 
         submissions,
+        loading,
         createClass, 
         joinClass, 
         getClassesByUser,

@@ -5,9 +5,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { UserRole } from "@/types/user";
 import { toast } from "sonner";
 
+interface UserProfile {
+  name: string;
+  role: UserRole;
+}
+
 interface AuthContextType {
   user: SupabaseUser | null;
-  profile: { name: string; role: UserRole } | null;
+  profile: UserProfile | null;
   session: Session | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string, role: UserRole) => Promise<void>;
@@ -29,7 +34,7 @@ export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [profile, setProfile] = useState<{ name: string; role: UserRole } | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 

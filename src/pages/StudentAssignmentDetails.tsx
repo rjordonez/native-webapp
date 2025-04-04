@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useClass } from "@/context/ClassContext";
@@ -16,17 +15,18 @@ const StudentAssignmentDetails = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { assignments, submissions, getClassesByUser } = useClass();
+  const { assignments, submissions, getClassesByUser, loading, uploadAudio } = useClass();
   
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [timeLeft, setTimeLeft] = useState(40);
   const [currentSubmission, setCurrentSubmission] = useState<Submission | undefined>();
   const [audioUrls, setAudioUrls] = useState<string[]>([]);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   
   const assignment = assignments.find(a => a.id === id);
   const classes = getClassesByUser();
-  const classItem = classes.find(c => assignment && c.id === assignment.classId);
+  const classItem = assignment ? classes.find(c => c.id === assignment.classId) : undefined;
   
   // Initialize or get existing submission
   useEffect(() => {
@@ -99,14 +99,20 @@ const StudentAssignmentDetails = () => {
     };
   }, [isRecording, timeLeft, currentQuestionIndex, audioUrls, currentSubmission]);
   
-  if (!assignment || !currentSubmission) {
+  if (loading || !assignment || !currentSubmission) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
         <AppNavbar />
         <main className="flex-1 container py-8 flex items-center justify-center">
           <div className="text-center">
-            <h2 className="text-2xl font-semibold mb-4">Assignment not found</h2>
-            <Button onClick={() => navigate("/student")}>Back to Dashboard</Button>
+            {loading ? (
+              <p>Loading...</p>
+            ) : (
+              <>
+                <h2 className="text-2xl font-semibold mb-4">Assignment not found</h2>
+                <Button onClick={() => navigate("/student")}>Back to Dashboard</Button>
+              </>
+            )}
           </div>
         </main>
       </div>
