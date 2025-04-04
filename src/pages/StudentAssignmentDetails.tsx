@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useClass } from "@/context/ClassContext";
 import { useAuth } from "@/context/AuthContext";
@@ -10,12 +10,20 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Calendar, Clock, Mic, MicOff, ArrowRight, Check } from "lucide-react";
 import AppNavbar from "@/components/AppNavbar";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 const StudentAssignmentDetails = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { assignments, submissions, getClassesByUser, loading, uploadAudio } = useClass();
+  const { 
+    assignments, 
+    submissions, 
+    getClassesByUser, 
+    loading, 
+    uploadAudio,
+    updateSubmission 
+  } = useClass();
   
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
@@ -23,10 +31,104 @@ const StudentAssignmentDetails = () => {
   const [currentSubmission, setCurrentSubmission] = useState<Submission | undefined>();
   const [audioUrls, setAudioUrls] = useState<string[]>([]);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [recordedChunks, setRecordedChunks] = useState<BlobPart[]>([]);
   
   const assignment = assignments.find(a => a.id === id);
   const classes = getClassesByUser();
   const classItem = assignment ? classes.find(c => c.id === assignment.classId) : undefined;
+  
+  // Setup media recorder
+// Setup media recorder
+useEffect(() => {
+  const setupRecorder = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      
+      recorder.addEventListener('dataavailable', (event) => {
+        if (event.data.size > 0) {
+          setRecordedChunks((prev) => [...prev, event.data]);
+        }
+      });
+      
+      recorder.addEventListener('stop', async () => {
+        // Get the latest state directly to avoid closure issues
+        const chunks = recordedChunks;
+        const currentIndex = currentQuestionIndex;
+        
+        // Create a blob from the recorded chunks
+        if (chunks.length === 0) return;
+        
+        const audioBlob = new Blob(chunks, {
+          type: 'audio/webm',
+        });
+        
+        // Upload the audio to Supabase
+        if (assignment && user) {
+          try {
+            toast.info("Uploading your recording...");
+            const audioUrl = await uploadAudio(assignment.id, currentIndex, audioBlob);
+            
+            if (audioUrl) {
+              // Update the audio URLs array and submission in one step to avoid desynchronization
+              setAudioUrls(prev => {
+                const newUrls = [...prev];
+                newUrls[currentIndex] = audioUrl;
+                return newUrls;
+              });
+              
+              setCurrentSubmission(prev => {
+                if (!prev) return prev;
+                
+                const updatedAnswers = [...prev.answers];
+                updatedAnswers[currentIndex] = {
+                  ...updatedAnswers[currentIndex],
+                  audioUrl: audioUrl
+                };
+                
+                const updatedSubmission = {
+                  ...prev,
+                  status: "in_progress" as const,
+                  answers: updatedAnswers
+                };
+                
+                // Update in Supabase
+                updateSubmission(updatedSubmission).catch(err => {
+                  console.error("Error updating submission:", err);
+                });
+                
+                return updatedSubmission;
+              });
+              
+              toast.success("Recording saved successfully!");
+            }
+          } catch (error) {
+            console.error("Error uploading audio:", error);
+            toast.error("Failed to upload recording. Please try again.");
+          }
+        }
+        
+        // Clear the recorded chunks for the next recording
+        setRecordedChunks([]);
+      });
+      
+      setMediaRecorder(recorder);
+    } catch (error) {
+      console.error('Error accessing microphone:', error);
+      toast.error('Could not access your microphone. Please check your browser permissions.');
+    }
+  };
+
+  setupRecorder();
+  
+  // Cleanup function
+  return () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+    }
+  };
+}, []);
   
   // Initialize or get existing submission
   useEffect(() => {
@@ -60,7 +162,14 @@ const StudentAssignmentDetails = () => {
     setAudioUrls(urls);
     
   }, [assignment, user, submissions]);
-  
+  useEffect(() => {
+    console.log("audioUrls updated:", audioUrls);
+    console.log("Current submission answers:", currentSubmission?.answers);
+    
+    // Check if all questions are answered
+    const allAnswered = audioUrls.every(url => url !== "");
+    console.log("All questions answered:", allAnswered);
+  }, [audioUrls, currentSubmission]);
   // Recording timer
   useEffect(() => {
     let timer: number | undefined;
@@ -70,34 +179,23 @@ const StudentAssignmentDetails = () => {
         setTimeLeft(prev => prev - 1);
       }, 1000);
     } else if (isRecording && timeLeft === 0) {
-      setIsRecording(false);
-      // In a real app, this would stop the recording
-      
-      // Simulate recording completion
-      const newAudioUrls = [...audioUrls];
-      newAudioUrls[currentQuestionIndex] = `/mock-audio-${currentQuestionIndex + 1}.mp3`;
-      setAudioUrls(newAudioUrls);
-      
-      // Update submission status to in_progress
-      if (currentSubmission) {
-        const updatedAnswers = [...currentSubmission.answers];
-        updatedAnswers[currentQuestionIndex] = {
-          ...updatedAnswers[currentQuestionIndex],
-          audioUrl: `/mock-audio-${currentQuestionIndex + 1}.mp3`
-        };
-        
-        setCurrentSubmission({
-          ...currentSubmission,
-          status: "in_progress",
-          answers: updatedAnswers
-        });
-      }
+      stopRecording();
     }
     
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [isRecording, timeLeft, currentQuestionIndex, audioUrls, currentSubmission]);
+  }, [isRecording, timeLeft]);
+  
+  const stopRecording = () => {
+    console.log("Before stopping recording, audioUrls:", audioUrls);
+    
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      setIsRecording(false);
+      mediaRecorder.stop();
+      // Don't try to update audioUrls here - it will be updated in the 'stop' event listener
+    }
+  };
   
   if (loading || !assignment || !currentSubmission) {
     return (
@@ -120,29 +218,20 @@ const StudentAssignmentDetails = () => {
   }
   
   const toggleRecording = () => {
+    if (!mediaRecorder) {
+      toast.error('Media recorder not initialized. Please check your browser permissions.');
+      return;
+    }
+
     if (isRecording) {
-      setIsRecording(false);
-      
-      // Simulate recording completion
-      const newAudioUrls = [...audioUrls];
-      newAudioUrls[currentQuestionIndex] = `/mock-audio-${currentQuestionIndex + 1}.mp3`;
-      setAudioUrls(newAudioUrls);
-      
-      // Update submission
-      const updatedAnswers = [...currentSubmission.answers];
-      updatedAnswers[currentQuestionIndex] = {
-        ...updatedAnswers[currentQuestionIndex],
-        audioUrl: `/mock-audio-${currentQuestionIndex + 1}.mp3`
-      };
-      
-      setCurrentSubmission({
-        ...currentSubmission,
-        status: "in_progress",
-        answers: updatedAnswers
-      });
+      // Stop recording
+      stopRecording();
     } else {
+      // Start recording
       setIsRecording(true);
       setTimeLeft(40); // Reset timer to 40 seconds
+      setRecordedChunks([]); // Clear any previous recording chunks
+      mediaRecorder.start(100); // Collect data every 100ms
     }
   };
   
@@ -162,28 +251,51 @@ const StudentAssignmentDetails = () => {
     }
   };
   
-  const submitAssignment = () => {
+  const submitAssignment = async () => {
     if (currentSubmission) {
       // Check if all questions have been answered
       const allAnswered = currentSubmission.answers.every(answer => answer.audioUrl);
       
       if (!allAnswered) {
-        alert("Please answer all questions before submitting.");
+        toast.error("Please answer all questions before submitting.");
         return;
       }
       
-      // Update submission status to submitted
-      const updatedSubmission = {
-        ...currentSubmission,
-        status: "submitted" as const,
-        submittedAt: new Date().toISOString()
-      };
-      
-      // In a real app, this would be saved to the backend
-      console.log("Assignment submitted:", updatedSubmission);
-      
-      // Navigate back to student dashboard
-      navigate("/student");
+      // Ask for confirmation before submitting
+      if (confirm("Are you sure you want to submit this assignment? You won't be able to make changes after submission.")) {
+        try {
+          // Show loading toast
+          const toastId = toast.loading("Submitting assignment...");
+          
+          // Update submission status to submitted
+          const updatedSubmission = {
+            ...currentSubmission,
+            status: "submitted" as const,
+            submittedAt: new Date().toISOString()
+          };
+          
+          // Process submission in the background without awaiting
+          updateSubmission(updatedSubmission)
+            .then(() => {
+              // Update toast on success
+              toast.dismiss(toastId);
+              toast.success("Assignment submitted successfully!");
+              
+              // Now navigate to student dashboard
+              navigate("/student");
+            })
+            .catch((error) => {
+              // Handle error
+              console.error("Error submitting assignment:", error);
+              toast.dismiss(toastId);
+              toast.error("Failed to submit assignment. Please try again.");
+            });
+        } catch (error) {
+          console.error("Error preparing submission:", error);
+          toast.error("Failed to submit assignment. Please try again.");
+        }
+      }
+      // If user cancels, do nothing and stay on the page
     }
   };
   
@@ -310,11 +422,11 @@ const StudentAssignmentDetails = () => {
               </Button>
             ) : (
               <Button 
-                onClick={submitAssignment}
-                disabled={!audioUrls[currentQuestionIndex]}
-              >
-                Submit Assignment <Check className="ml-2 h-4 w-4" />
-              </Button>
+              onClick={submitAssignment}
+              disabled={!currentSubmission || !currentSubmission.answers.every(answer => answer.audioUrl)}
+            >
+              Submit Assignment <Check className="ml-2 h-4 w-4" />
+            </Button>
             )}
           </CardFooter>
         </Card>

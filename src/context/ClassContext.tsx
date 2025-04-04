@@ -72,7 +72,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const loadUserData = async () => {
     if (!user) return;
-    
+      
     try {
       setLoading(true);
       console.log("Loading classes data for user:", user.id, "with role:", profile?.role);
@@ -111,6 +111,37 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               cls.students = studentsData.map(s => s.student_id);
             }
           }
+  
+          // Load assignments for teacher's classes
+          if (transformedClasses.length > 0) {
+            const classIds = transformedClasses.map(c => c.id);
+            
+            const { data: assignmentsData, error: assignmentsError } = await supabase
+              .from('assignments')
+              .select('*')
+              .in('course_id', classIds);
+            
+            if (assignmentsError) {
+              console.error('Error loading assignments:', assignmentsError);
+            } else if (assignmentsData && assignmentsData.length > 0) {
+              console.log("Assignments loaded:", assignmentsData.length);
+              
+              const transformedAssignments = assignmentsData.map(a => ({
+                id: a.id.toString(), // Convert number to string for your model
+                classId: a.course_id,
+                title: a.title,
+                dueDate: a.due_date || "",
+                topic: a.topic || "",
+                questions: a.questions,
+                createdAt: a.created_at || new Date().toISOString(),
+              }));
+              
+              setAssignments(transformedAssignments);
+            } else {
+              // No assignments yet
+              setAssignments([]);
+            }
+          }
         }
       } 
       // For students, fetch classes they are enrolled in
@@ -144,16 +175,44 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }));
             
             setClasses(transformedClasses);
+  
+            // Load assignments for student's classes
+            if (transformedClasses.length > 0) {
+              const classIds = transformedClasses.map(c => c.id);
+              
+              const { data: assignmentsData, error: assignmentsError } = await supabase
+                .from('assignments')
+                .select('*')
+                .in('course_id', classIds);
+              
+              if (assignmentsError) {
+                console.error('Error loading assignments:', assignmentsError);
+              } else if (assignmentsData && assignmentsData.length > 0) {
+                console.log("Assignments loaded:", assignmentsData.length);
+                
+                const transformedAssignments = assignmentsData.map(a => ({
+                  id: a.id.toString(),
+                  classId: a.course_id,
+                  title: a.title,
+                  dueDate: a.due_date || "",
+                  topic: a.topic || "",
+                  questions: a.questions,
+                  createdAt: a.created_at || new Date().toISOString(),
+                }));
+                
+                setAssignments(transformedAssignments);
+              } else {
+                // No assignments yet
+                setAssignments([]);
+              }
+            }
           }
         } else {
           console.log("Student is not enrolled in any classes");
           setClasses([]);
         }
       }
-      
-      // For now, use mock data for assignments and submissions
-      // Later this can be updated to fetch from Supabase
-      // For mock data generation, we'll use the existing pattern in useEffects below
+  
     } catch (error) {
       console.error('Error loading user data:', error);
       toast.error('Error loading data');
@@ -313,36 +372,69 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     questions: string[]
   ) => {
     if (!user || profile?.role !== "teacher") return;
-
+  
     const classObj = classes.find(c => c.id === classId);
     if (!classObj) {
-      toast("Class not found");
+      toast.error("Class not found");
       return;
     }
-
-    const newAssignment: Assignment = {
-      id: Math.random().toString(36).substring(2, 9),
-      classId,
-      title,
-      dueDate,
-      topic,
-      questions,
-      createdAt: new Date().toISOString(),
-    };
-
-    setAssignments([...assignments, newAssignment]);
-    
-    const newSubmissions = classObj.students.map(studentId => ({
-      id: Math.random().toString(36).substring(2, 9),
-      assignmentId: newAssignment.id,
-      studentId,
-      status: "not_started" as const,
-      answers: questions.map((_, index) => ({ questionId: index })),
-    }));
-
-    setSubmissions([...submissions, ...newSubmissions]);
-
-    toast("Assignment created successfully");
+  
+    try {
+      // Now fully type-safe with our updated database types
+      const { data: assignmentData, error: assignmentError } = await supabase
+        .from('assignments')
+        .insert({
+          course_id: classId,
+          title,
+          questions,
+          due_date: dueDate,
+          topic,
+          created_by: user.id
+        })
+        .select()
+        .single();
+      
+      if (assignmentError) {
+        console.error('Error creating assignment:', assignmentError);
+        throw assignmentError;
+      }
+      
+      if (!assignmentData) {
+        throw new Error('Failed to create assignment');
+      }
+      
+      // Transform the DB data to match your frontend model
+      const newAssignment: Assignment = {
+        id: assignmentData.id.toString(), // Convert number to string for your model
+        classId: assignmentData.course_id,
+        title: assignmentData.title,
+        dueDate: assignmentData.due_date || dueDate,
+        topic: assignmentData.topic || topic,
+        questions: assignmentData.questions,
+        createdAt: assignmentData.created_at || new Date().toISOString(),
+      };
+  
+      // Update local state
+      setAssignments(prev => [...prev, newAssignment]);
+      
+      // Create submissions for each student
+      const newSubmissions = classObj.students.map(studentId => ({
+        id: Math.random().toString(36).substring(2, 9),
+        assignmentId: newAssignment.id,
+        studentId,
+        status: "not_started" as const,
+        answers: questions.map((_, index) => ({ questionId: index })),
+      }));
+  
+      setSubmissions([...submissions, ...newSubmissions]);
+  
+      toast.success("Assignment created successfully");
+    } catch (error: any) {
+      console.error('Error in createAssignment:', error);
+      toast.error('Failed to create assignment', {
+        description: error.message
+      });
+    }
   };
 
   const getAssignmentsByClass = (classId: string): Assignment[] => {
@@ -364,9 +456,74 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const updateSubmission = async (submission: Submission) => {
-    setSubmissions(prev => 
-      prev.map(s => s.id === submission.id ? submission : s)
-    );
+    if (!user) return;
+    
+    try {
+      // Check if this submission exists in Supabase
+      const { data: existingData, error: checkError } = await supabase
+        .from('submissions')
+        .select('id')
+        .eq('assignment_id', parseInt(submission.assignmentId))
+        .eq('student_id', submission.studentId)
+        .maybeSingle();
+      
+      if (checkError) {
+        console.error('Error checking submission:', checkError);
+        throw checkError;
+      }
+      
+      if (existingData) {
+        // Update existing submission
+        const { error: updateError } = await supabase
+          .from('submissions')
+          .update({
+            status: submission.status,
+            answers: submission.answers,
+            submitted_at: submission.status === 'submitted' ? new Date().toISOString() : null,
+            feedback: submission.feedback
+          })
+          .eq('id', existingData.id);
+        
+        if (updateError) {
+          console.error('Error updating submission:', updateError);
+          throw updateError;
+        }
+      } else {
+        // Create new submission
+        const { error: insertError } = await supabase
+          .from('submissions')
+          .insert({
+            assignment_id: parseInt(submission.assignmentId),
+            student_id: submission.studentId,
+            status: submission.status,
+            answers: submission.answers,
+            submitted_at: submission.status === 'submitted' ? new Date().toISOString() : null,
+            feedback: submission.feedback
+          });
+        
+        if (insertError) {
+          console.error('Error creating submission:', insertError);
+          throw insertError;
+        }
+      }
+      
+      // Update local state
+      setSubmissions(prev => 
+        prev.map(s => s.id === submission.id ? submission : s)
+      );
+      
+      if (submission.status === 'submitted') {
+        toast.success("Submission completed!");
+      } else {
+        toast.success("Progress saved");
+      }
+    } catch (error: any) {
+      console.error('Error in updateSubmission:', error);
+      toast.error('Failed to update submission', {
+        description: error.message
+      });
+      throw error; // Re-throw so the calling component can handle it
+    }
   };
 
   const updateSubmissionFeedback = async (submissionId: string, comment: string, reviewed: boolean) => {
@@ -431,83 +588,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   // Set up mock data if needed
-  useEffect(() => {
-    if (classes.length > 0 && assignments.length === 0) {
-      // Create some mock assignments for existing classes
-      const mockAssignments: Assignment[] = [];
-      
-      classes.forEach(classItem => {
-        const topicsToUse = mockTopics.slice(0, 3); // Use first 3 topics
-        
-        topicsToUse.forEach((topic, index) => {
-          const questionsForTopic = mockQuestions[topic as keyof typeof mockQuestions] || [];
-          
-          mockAssignments.push({
-            id: `assignment_${classItem.id}_${index}`,
-            classId: classItem.id,
-            title: `${topic} Practice ${index + 1}`,
-            dueDate: new Date(Date.now() + (index + 1) * 7 * 24 * 60 * 60 * 1000).toISOString(), // Due in 1, 2, 3 weeks
-            topic,
-            questions: questionsForTopic,
-            createdAt: new Date().toISOString()
-          });
-        });
-      });
-      
-      if (mockAssignments.length > 0) {
-        setAssignments(mockAssignments);
-      }
-    }
-  }, [classes, assignments.length]);
 
-  useEffect(() => {
-    if (submissions.length === 0 && assignments.length > 0) {
-      const mockSubmissions: Submission[] = [];
-      
-      assignments.forEach(assignment => {
-        const classItem = classes.find(c => c.id === assignment.classId);
-        if (!classItem) return;
-        
-        const classStudents = mockStudents.slice(0, Math.min(8, mockStudents.length));
-        
-        classStudents.forEach((student, index) => {
-          let status: "not_started" | "in_progress" | "submitted";
-          let submittedAt: string | undefined;
-          
-          if (index < classStudents.length * 0.5) {
-            status = "submitted";
-            const submissionDate = new Date();
-            submissionDate.setDate(submissionDate.getDate() - Math.floor(Math.random() * 7) - 1);
-            submittedAt = submissionDate.toISOString();
-          } else if (index < classStudents.length * 0.75) {
-            status = "in_progress";
-            submittedAt = undefined;
-          } else {
-            status = "not_started";
-            submittedAt = undefined;
-          }
-          
-          mockSubmissions.push({
-            id: `sub_${assignment.id}_${student.id}`,
-            assignmentId: assignment.id,
-            studentId: student.id,
-            status,
-            answers: assignment.questions.map((_, index) => ({
-              questionId: index,
-              audioUrl: status === "submitted" ? `/mock-audio-${index + 1}.mp3` : undefined
-            })),
-            submittedAt,
-            feedback: status === "submitted" ? {
-              comment: index % 3 === 0 ? "Good job! Your pronunciation is clear and natural." : undefined,
-              reviewed: index % 3 === 0
-            } : undefined
-          });
-        });
-      });
-      
-      setSubmissions(mockSubmissions);
-    }
-  }, [assignments, classes, submissions.length]);
 
   return (
     <ClassContext.Provider 

@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 
 // Topic options for the dropdown
 const TOPICS = [
@@ -31,7 +32,8 @@ const CreateAssignment = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { classes, createAssignment } = useClass();
-  const teacherClasses = classes.filter(c => c.teacherId === localStorage.getItem("userId"));
+const { user } = useAuth(); // Import and use your Auth context
+const teacherClasses = classes.filter(c => c.teacherId === user?.id);
   
   // Use the classId from state if available
   const initialClassId = location.state?.classId || (teacherClasses.length > 0 ? teacherClasses[0].id : "");
