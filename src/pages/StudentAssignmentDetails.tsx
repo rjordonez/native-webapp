@@ -39,100 +39,123 @@ const StudentAssignmentDetails = () => {
   const classItem = assignment ? classes.find(c => c.id === assignment.classId) : undefined;
   
   // Setup media recorder
-// Setup media recorder
-useEffect(() => {
-  const setupRecorder = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      
-      recorder.addEventListener('dataavailable', (event) => {
-        if (event.data.size > 0) {
-          setRecordedChunks((prev) => [...prev, event.data]);
-        }
-      });
-      
-      recorder.addEventListener('stop', async () => {
-        // Get the latest state directly to avoid closure issues
-        const chunks = recordedChunks;
-        const currentIndex = currentQuestionIndex;
+  useEffect(() => {
+    const setupRecorder = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recorder = new MediaRecorder(stream);
         
-        // Create a blob from the recorded chunks
-        if (chunks.length === 0) return;
-        
-        const audioBlob = new Blob(chunks, {
-          type: 'audio/webm',
+        recorder.addEventListener('dataavailable', (event) => {
+          console.log("Data available event fired, data size:", event.data.size);
+          if (event.data.size > 0) {
+            setRecordedChunks((prev) => {
+              console.log("Adding chunk to recorded chunks, current chunks:", prev.length);
+              return [...prev, event.data];
+            });
+          }
         });
         
-        // Upload the audio to Supabase
-        if (assignment && user) {
-          try {
-            toast.info("Uploading your recording...");
-            const audioUrl = await uploadAudio(assignment.id, currentIndex, audioBlob);
-            
-            if (audioUrl) {
-              // Update the audio URLs array and submission in one step to avoid desynchronization
-              setAudioUrls(prev => {
-                const newUrls = [...prev];
-                newUrls[currentIndex] = audioUrl;
-                return newUrls;
-              });
+        recorder.addEventListener('stop', async () => {
+          console.log("Stop event fired");
+          console.log("Recorded chunks:", recordedChunks.length);
+          
+          // Get the latest state directly to avoid closure issues
+          const chunks = recordedChunks;
+          const currentIndex = currentQuestionIndex;
+          
+          // Create a blob from the recorded chunks
+          if (chunks.length === 0) {
+            console.log("No chunks recorded");
+            return;
+          }
+          
+          const audioBlob = new Blob(chunks, {
+            type: 'audio/webm',
+          });
+          console.log("Audio blob created, size:", audioBlob.size);
+          setAudioBlob(audioBlob);
+          
+          // Upload the audio to Supabase
+          if (assignment && user) {
+            try {
+              toast.info("Uploading your recording...");
+              console.log("Uploading audio for assignment:", assignment.id, "question:", currentIndex);
+              const audioUrl = await uploadAudio(assignment.id, currentIndex, audioBlob);
+              console.log("Received audio URL:", audioUrl);
               
-              setCurrentSubmission(prev => {
-                if (!prev) return prev;
-                
-                const updatedAnswers = [...prev.answers];
-                updatedAnswers[currentIndex] = {
-                  ...updatedAnswers[currentIndex],
-                  audioUrl: audioUrl
-                };
-                
-                const updatedSubmission = {
-                  ...prev,
-                  status: "in_progress" as const,
-                  answers: updatedAnswers
-                };
-                
-                // Update in Supabase
-                updateSubmission(updatedSubmission).catch(err => {
-                  console.error("Error updating submission:", err);
+              if (audioUrl) {
+                // Update the audio URLs array and submission in one step to avoid desynchronization
+                setAudioUrls(prev => {
+                  console.log("Updating audioUrls, current:", prev);
+                  const newUrls = [...prev];
+                  newUrls[currentIndex] = audioUrl;
+                  console.log("New audioUrls:", newUrls);
+                  return newUrls;
                 });
                 
-                return updatedSubmission;
-              });
-              
-              toast.success("Recording saved successfully!");
+                setCurrentSubmission(prev => {
+                  console.log("Updating currentSubmission");
+                  if (!prev) return prev;
+                  
+                  const updatedAnswers = [...prev.answers];
+                  updatedAnswers[currentIndex] = {
+                    ...updatedAnswers[currentIndex],
+                    audioUrl: audioUrl
+                  };
+                  
+                  const updatedSubmission = {
+                    ...prev,
+                    status: "in_progress" as const,
+                    answers: updatedAnswers
+                  };
+                  
+                  // Update in Supabase
+                  console.log("Sending submission update to Supabase");
+                  updateSubmission(updatedSubmission).catch(err => {
+                    console.error("Error updating submission:", err);
+                  });
+                  
+                  console.log("Returning updated submission");
+                  return updatedSubmission;
+                });
+                
+                toast.success("Recording saved successfully!");
+              }
+            } catch (error) {
+              console.error("Error uploading audio:", error);
+              toast.error("Failed to upload recording. Please try again.");
             }
-          } catch (error) {
-            console.error("Error uploading audio:", error);
-            toast.error("Failed to upload recording. Please try again.");
           }
-        }
+          
+          // Clear the recorded chunks for the next recording
+          console.log("Clearing recorded chunks");
+          setRecordedChunks([]);
+        });
         
-        // Clear the recorded chunks for the next recording
-        setRecordedChunks([]);
-      });
-      
-      setMediaRecorder(recorder);
-    } catch (error) {
-      console.error('Error accessing microphone:', error);
-      toast.error('Could not access your microphone. Please check your browser permissions.');
-    }
-  };
+        console.log("Media recorder setup complete");
+        setMediaRecorder(recorder);
+      } catch (error) {
+        console.error('Error accessing microphone:', error);
+        toast.error('Could not access your microphone. Please check your browser permissions.');
+      }
+    };
 
-  setupRecorder();
-  
-  // Cleanup function
-  return () => {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-      mediaRecorder.stop();
-    }
-  };
-}, []);
+    setupRecorder();
+    
+    // Cleanup function
+    return () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        console.log("Cleaning up: stopping recorder");
+        mediaRecorder.stop();
+      }
+    };
+  }, []);
   
   // Initialize or get existing submission
   useEffect(() => {
     if (!assignment || !user) return;
+    
+    console.log("Initializing submission for assignment:", assignment.id);
     
     // Find existing submission or create a new one
     let submission = submissions.find(
@@ -140,6 +163,7 @@ useEffect(() => {
     );
     
     if (!submission) {
+      console.log("No existing submission found, creating a new one");
       // This would be handled by the backend in a real app
       submission = {
         id: `temp_${Math.random().toString(36).substring(2, 9)}`,
@@ -148,6 +172,8 @@ useEffect(() => {
         status: "not_started",
         answers: assignment.questions.map((_, index) => ({ questionId: index })),
       };
+    } else {
+      console.log("Found existing submission:", submission.id);
     }
     
     setCurrentSubmission(submission);
@@ -159,9 +185,11 @@ useEffect(() => {
         urls[answer.questionId] = answer.audioUrl;
       }
     });
+    console.log("Setting initial audio URLs:", urls);
     setAudioUrls(urls);
     
   }, [assignment, user, submissions]);
+  
   useEffect(() => {
     console.log("audioUrls updated:", audioUrls);
     console.log("Current submission answers:", currentSubmission?.answers);
@@ -170,6 +198,7 @@ useEffect(() => {
     const allAnswered = audioUrls.every(url => url !== "");
     console.log("All questions answered:", allAnswered);
   }, [audioUrls, currentSubmission]);
+  
   // Recording timer
   useEffect(() => {
     let timer: number | undefined;
@@ -179,21 +208,30 @@ useEffect(() => {
         setTimeLeft(prev => prev - 1);
       }, 1000);
     } else if (isRecording && timeLeft === 0) {
+      console.log("Timer reached zero, stopping recording");
       stopRecording();
     }
     
     return () => {
-      if (timer) clearInterval(timer);
+      if (timer) {
+        console.log("Clearing timer");
+        clearInterval(timer);
+      }
     };
   }, [isRecording, timeLeft]);
   
   const stopRecording = () => {
     console.log("Before stopping recording, audioUrls:", audioUrls);
+    console.log("Current recorder state:", mediaRecorder?.state);
+    console.log("Current recorded chunks:", recordedChunks.length);
     
     if (mediaRecorder && mediaRecorder.state === 'recording') {
+      console.log("Stopping recorder...");
       setIsRecording(false);
       mediaRecorder.stop();
-      // Don't try to update audioUrls here - it will be updated in the 'stop' event listener
+      console.log("Recorder stopped");
+    } else {
+      console.log("Recorder not in recording state, cannot stop");
     }
   };
   
@@ -218,25 +256,33 @@ useEffect(() => {
   }
   
   const toggleRecording = () => {
+    console.log("Toggle recording called. Current state:", isRecording);
+    
     if (!mediaRecorder) {
+      console.error("Media recorder not initialized");
       toast.error('Media recorder not initialized. Please check your browser permissions.');
       return;
     }
 
     if (isRecording) {
       // Stop recording
+      console.log("Stopping current recording");
       stopRecording();
     } else {
       // Start recording
+      console.log("Starting recording");
       setIsRecording(true);
       setTimeLeft(40); // Reset timer to 40 seconds
       setRecordedChunks([]); // Clear any previous recording chunks
+      console.log("Starting mediaRecorder");
       mediaRecorder.start(100); // Collect data every 100ms
+      console.log("MediaRecorder started");
     }
   };
   
   const goToNextQuestion = () => {
     if (currentQuestionIndex < assignment.questions.length - 1) {
+      console.log("Moving to next question");
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setIsRecording(false);
       setTimeLeft(40);
@@ -245,6 +291,7 @@ useEffect(() => {
   
   const goToPreviousQuestion = () => {
     if (currentQuestionIndex > 0) {
+      console.log("Moving to previous question");
       setCurrentQuestionIndex(currentQuestionIndex - 1);
       setIsRecording(false);
       setTimeLeft(40);
@@ -274,6 +321,8 @@ useEffect(() => {
             submittedAt: new Date().toISOString()
           };
           
+          console.log("Submitting assignment:", updatedSubmission);
+          
           // Process submission in the background without awaiting
           updateSubmission(updatedSubmission)
             .then(() => {
@@ -282,6 +331,7 @@ useEffect(() => {
               toast.success("Assignment submitted successfully!");
               
               // Now navigate to student dashboard
+              console.log("Navigating to student dashboard");
               navigate("/student");
             })
             .catch((error) => {
@@ -294,8 +344,9 @@ useEffect(() => {
           console.error("Error preparing submission:", error);
           toast.error("Failed to submit assignment. Please try again.");
         }
+      } else {
+        console.log("User cancelled submission");
       }
-      // If user cancels, do nothing and stay on the page
     }
   };
   
@@ -422,11 +473,11 @@ useEffect(() => {
               </Button>
             ) : (
               <Button 
-              onClick={submitAssignment}
-              disabled={!currentSubmission || !currentSubmission.answers.every(answer => answer.audioUrl)}
-            >
-              Submit Assignment <Check className="ml-2 h-4 w-4" />
-            </Button>
+                onClick={submitAssignment}
+                disabled={!currentSubmission || !currentSubmission.answers.every(answer => answer.audioUrl)}
+              >
+                Submit Assignment <Check className="ml-2 h-4 w-4" />
+              </Button>
             )}
           </CardFooter>
         </Card>
