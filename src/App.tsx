@@ -31,7 +31,7 @@ const ProtectedRoute = ({
   children: React.ReactNode;
   requiredRole?: "teacher" | "student"; 
 }) => {
-  const { user, isLoading } = useAuth();
+  const { user, profile, isLoading } = useAuth();
   
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -41,13 +41,13 @@ const ProtectedRoute = ({
     return <Navigate to="/login" />;
   }
   
-  if (requiredRole && user.role !== requiredRole) {
-    return <Navigate to={user.role === "teacher" ? "/teacher" : "/student"} />;
+  // Check using the profile's role
+  if (requiredRole && profile?.role !== requiredRole) {
+    return <Navigate to={profile?.role === "teacher" ? "/teacher" : "/student"} />;
   }
   
   return <>{children}</>;
 };
-
 const AppRoutes = () => {
   const { user } = useAuth();
   
