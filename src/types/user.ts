@@ -53,3 +53,45 @@ export const mockStudents: User[] = [
   { id: "student7", email: "grace@example.com", role: "student", name: "Grace Taylor" },
   { id: "student8", email: "henry@example.com", role: "student", name: "Henry Clark" }
 ];
+
+// Mock assignments topics
+export const mockTopics = [
+  "Hometown",
+  "Family",
+  "Work",
+  "Education",
+  "Hobbies",
+  "Travel",
+  "Food",
+  "Technology",
+  "Environment",
+  "Culture"
+];
+
+// Mock assignment questions
+export const mockQuestions = {
+  "Hometown": [
+    "Tell me about the place where you grew up.",
+    "What do you like most about your hometown?",
+    "How has your hometown changed in recent years?",
+    "Would you recommend your hometown as a place to visit? Why or why not?"
+  ],
+  "Family": [
+    "Can you describe your family structure?",
+    "What activities do you enjoy doing with your family?",
+    "How important is family in your culture?",
+    "What family traditions do you maintain?"
+  ],
+  "Work": [
+    "What do you do for work?",
+    "How did you choose your career path?",
+    "What do you enjoy most about your job?",
+    "How do you maintain work-life balance?"
+  ],
+  "Education": [
+    "Describe your educational background.",
+    "What was your favorite subject in school and why?",
+    "How has education impacted your life?",
+    "What would you change about the education system in your country?"
+  ]
+};

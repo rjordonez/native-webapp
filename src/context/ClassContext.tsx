@@ -1,5 +1,6 @@
+
 import React, { createContext, useState, useContext, useEffect } from "react";
-import { Class, Assignment, Submission, mockStudents } from "@/types/user";
+import { Class, Assignment, Submission, mockStudents, mockTopics, mockQuestions } from "@/types/user";
 import { useAuth } from "./AuthContext";
 import { toast } from "sonner";
 
@@ -25,6 +26,8 @@ interface ClassContextType {
     inProgress: number; 
     notStarted: number;
   };
+  updateSubmission: (submission: Submission) => void;
+  updateSubmissionFeedback: (submissionId: string, comment: string, reviewed: boolean) => void;
 }
 
 const ClassContext = createContext<ClassContextType>({
@@ -38,6 +41,8 @@ const ClassContext = createContext<ClassContextType>({
   getAssignmentsByClass: () => [],
   getSubmissionsByAssignment: () => [],
   getAssignmentStats: () => ({ total: 0, submitted: 0, inProgress: 0, notStarted: 0 }),
+  updateSubmission: () => {},
+  updateSubmissionFeedback: () => {},
 });
 
 export const useClass = () => useContext(ClassContext);
@@ -180,6 +185,36 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     toast("Assignment created successfully");
   };
 
+  // Generate mock data for assignments and submissions if none exist
+  useEffect(() => {
+    if (classes.length > 0 && assignments.length === 0) {
+      // Create some mock assignments for existing classes
+      const mockAssignments: Assignment[] = [];
+      
+      classes.forEach(classItem => {
+        const topicsToUse = mockTopics.slice(0, 3); // Use first 3 topics
+        
+        topicsToUse.forEach((topic, index) => {
+          const questionsForTopic = mockQuestions[topic as keyof typeof mockQuestions] || [];
+          
+          mockAssignments.push({
+            id: `assignment_${classItem.id}_${index}`,
+            classId: classItem.id,
+            title: `${topic} Practice ${index + 1}`,
+            dueDate: new Date(Date.now() + (index + 1) * 7 * 24 * 60 * 60 * 1000).toISOString(), // Due in 1, 2, 3 weeks
+            topic,
+            questions: questionsForTopic,
+            createdAt: new Date().toISOString()
+          });
+        });
+      });
+      
+      if (mockAssignments.length > 0) {
+        setAssignments(mockAssignments);
+      }
+    }
+  }, [classes, assignments.length]);
+
   useEffect(() => {
     if (submissions.length === 0 && assignments.length > 0) {
       const mockSubmissions: Submission[] = [];
@@ -216,7 +251,11 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               questionId: index,
               audioUrl: status === "submitted" ? `/mock-audio-${index + 1}.mp3` : undefined
             })),
-            submittedAt
+            submittedAt,
+            feedback: status === "submitted" ? {
+              comment: index % 3 === 0 ? "Good job! Your pronunciation is clear and natural." : undefined,
+              reviewed: index % 3 === 0
+            } : undefined
           });
         });
       });
@@ -243,6 +282,31 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return { total, submitted, inProgress, notStarted };
   };
 
+  const updateSubmission = (submission: Submission) => {
+    setSubmissions(prev => 
+      prev.map(s => s.id === submission.id ? submission : s)
+    );
+  };
+
+  const updateSubmissionFeedback = (submissionId: string, comment: string, reviewed: boolean) => {
+    setSubmissions(prev => 
+      prev.map(s => {
+        if (s.id === submissionId) {
+          return {
+            ...s,
+            feedback: {
+              comment,
+              reviewed
+            }
+          };
+        }
+        return s;
+      })
+    );
+    
+    toast("Feedback saved successfully");
+  };
+
   return (
     <ClassContext.Provider 
       value={{ 
@@ -255,7 +319,9 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         createAssignment,
         getAssignmentsByClass,
         getSubmissionsByAssignment,
-        getAssignmentStats
+        getAssignmentStats,
+        updateSubmission,
+        updateSubmissionFeedback
       }}
     >
       {children}

@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -16,6 +17,9 @@ import JoinClass from "./pages/JoinClass";
 import ClassDetails from "./pages/ClassDetails";
 import CreateAssignment from "./pages/CreateAssignment";
 import AssignmentDetails from "./pages/AssignmentDetails";
+import StudentClassView from "./pages/StudentClassView";
+import StudentAssignmentDetails from "./pages/StudentAssignmentDetails";
+import StudentSubmissionView from "./pages/StudentSubmissionView";
 
 const queryClient = new QueryClient();
 
@@ -59,6 +63,7 @@ const AppRoutes = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       
+      {/* Teacher routes */}
       <Route path="/teacher" element={
         <ProtectedRoute requiredRole="teacher">
           <TeacherDashboard />
@@ -89,6 +94,7 @@ const AppRoutes = () => {
         </ProtectedRoute>
       } />
       
+      {/* Student routes */}
       <Route path="/student" element={
         <ProtectedRoute requiredRole="student">
           <StudentDashboard />
@@ -98,6 +104,24 @@ const AppRoutes = () => {
       <Route path="/join-class" element={
         <ProtectedRoute requiredRole="student">
           <JoinClass />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/student/class/:id" element={
+        <ProtectedRoute requiredRole="student">
+          <StudentClassView />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/student/assignment/:id" element={
+        <ProtectedRoute requiredRole="student">
+          <StudentAssignmentDetails />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/student/submission/:id" element={
+        <ProtectedRoute requiredRole="student">
+          <StudentSubmissionView />
         </ProtectedRoute>
       } />
       
