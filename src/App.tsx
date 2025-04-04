@@ -24,30 +24,35 @@ import StudentSubmissionView from "./pages/StudentSubmissionView";
 const queryClient = new QueryClient();
 
 // Protected route component
-const ProtectedRoute = ({ 
-  children, 
-  requiredRole, 
-}: { 
+const ProtectedRoute = ({
+  children,
+  requiredRole,
+}: {
   children: React.ReactNode;
-  requiredRole?: "teacher" | "student"; 
+  requiredRole: "teacher" | "student";
 }) => {
   const { user, profile, isLoading } = useAuth();
-  
+
   if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center">Loading...</div>
+    );
   }
-  
+
   if (!user) {
     return <Navigate to="/login" />;
   }
-  
-  // Check using the profile's role
+
+  // Changed from "user.role" to "profile?.role"
   if (requiredRole && profile?.role !== requiredRole) {
     return <Navigate to={profile?.role === "teacher" ? "/teacher" : "/student"} />;
   }
-  
+
   return <>{children}</>;
 };
+
+
+
 const AppRoutes = () => {
   const { user } = useAuth();
   
