@@ -14,6 +14,8 @@ import TeacherDashboard from "./pages/TeacherDashboard";
 import StudentDashboard from "./pages/StudentDashboard";
 import CreateClass from "./pages/CreateClass";
 import JoinClass from "./pages/JoinClass";
+import ClassDetails from "./pages/ClassDetails";
+import CreateAssignment from "./pages/CreateAssignment";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +68,18 @@ const AppRoutes = () => {
       <Route path="/create-class" element={
         <ProtectedRoute requiredRole="teacher">
           <CreateClass />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/class/:id" element={
+        <ProtectedRoute requiredRole="teacher">
+          <ClassDetails />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/create-assignment" element={
+        <ProtectedRoute requiredRole="teacher">
+          <CreateAssignment />
         </ProtectedRoute>
       } />
       
