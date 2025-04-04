@@ -36,4 +36,20 @@ export interface Submission {
     audioUrl?: string;
   }[];
   submittedAt?: string;
+  feedback?: {
+    comment?: string;
+    reviewed: boolean;
+  };
 }
+
+// Mock students to use for submissions display
+export const mockStudents: User[] = [
+  { id: "student1", email: "amy@example.com", role: "student", name: "Amy Johnson" },
+  { id: "student2", email: "bryan@example.com", role: "student", name: "Bryan Smith" },
+  { id: "student3", email: "clara@example.com", role: "student", name: "Clara Wilson" },
+  { id: "student4", email: "daniel@example.com", role: "student", name: "Daniel Brown" },
+  { id: "student5", email: "elena@example.com", role: "student", name: "Elena Garcia" },
+  { id: "student6", email: "frank@example.com", role: "student", name: "Frank Davis" },
+  { id: "student7", email: "grace@example.com", role: "student", name: "Grace Taylor" },
+  { id: "student8", email: "henry@example.com", role: "student", name: "Henry Clark" }
+];

@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -16,6 +15,7 @@ import CreateClass from "./pages/CreateClass";
 import JoinClass from "./pages/JoinClass";
 import ClassDetails from "./pages/ClassDetails";
 import CreateAssignment from "./pages/CreateAssignment";
+import AssignmentDetails from "./pages/AssignmentDetails";
 
 const queryClient = new QueryClient();
 
@@ -80,6 +80,12 @@ const AppRoutes = () => {
       <Route path="/create-assignment" element={
         <ProtectedRoute requiredRole="teacher">
           <CreateAssignment />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/assignment/:id" element={
+        <ProtectedRoute requiredRole="teacher">
+          <AssignmentDetails />
         </ProtectedRoute>
       } />
       

@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from "react";
-import { Class, Assignment, Submission } from "@/types/user";
+import { Class, Assignment, Submission, mockStudents } from "@/types/user";
 import { useAuth } from "./AuthContext";
 import { toast } from "sonner";
 
@@ -49,7 +49,6 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const { user } = useAuth();
 
   useEffect(() => {
-    // Load data from localStorage
     const savedClasses = localStorage.getItem("classes");
     const savedAssignments = localStorage.getItem("assignments");
     const savedSubmissions = localStorage.getItem("submissions");
@@ -65,7 +64,6 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  // Save data to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem("classes", JSON.stringify(classes));
   }, [classes]);
@@ -79,7 +77,6 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [submissions]);
 
   const generateRandomCode = (): string => {
-    // Generate a random 6-digit code
     return Math.floor(100000 + Math.random() * 900000).toString();
   };
 
@@ -170,7 +167,6 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setAssignments([...assignments, newAssignment]);
     
-    // Create empty submissions for all students in the class
     const newSubmissions = classObj.students.map(studentId => ({
       id: Math.random().toString(36).substring(2, 9),
       assignmentId: newAssignment.id,
@@ -183,6 +179,51 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     toast("Assignment created successfully");
   };
+
+  useEffect(() => {
+    if (submissions.length === 0 && assignments.length > 0) {
+      const mockSubmissions: Submission[] = [];
+      
+      assignments.forEach(assignment => {
+        const classItem = classes.find(c => c.id === assignment.classId);
+        if (!classItem) return;
+        
+        const classStudents = mockStudents.slice(0, Math.min(8, mockStudents.length));
+        
+        classStudents.forEach((student, index) => {
+          let status: "not_started" | "in_progress" | "submitted";
+          let submittedAt: string | undefined;
+          
+          if (index < classStudents.length * 0.5) {
+            status = "submitted";
+            const submissionDate = new Date();
+            submissionDate.setDate(submissionDate.getDate() - Math.floor(Math.random() * 7) - 1);
+            submittedAt = submissionDate.toISOString();
+          } else if (index < classStudents.length * 0.75) {
+            status = "in_progress";
+            submittedAt = undefined;
+          } else {
+            status = "not_started";
+            submittedAt = undefined;
+          }
+          
+          mockSubmissions.push({
+            id: `sub_${assignment.id}_${student.id}`,
+            assignmentId: assignment.id,
+            studentId: student.id,
+            status,
+            answers: assignment.questions.map((_, index) => ({
+              questionId: index,
+              audioUrl: status === "submitted" ? `/mock-audio-${index + 1}.mp3` : undefined
+            })),
+            submittedAt
+          });
+        });
+      });
+      
+      setSubmissions(mockSubmissions);
+    }
+  }, [assignments, classes, submissions.length]);
 
   const getAssignmentsByClass = (classId: string): Assignment[] => {
     return assignments.filter(a => a.classId === classId);
