@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -14,6 +15,7 @@ const Signup = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("student");
+  const [isSigningUp, setIsSigningUp] = useState(false);
   const { signup } = useAuth();
   const navigate = useNavigate();
 
@@ -27,14 +29,17 @@ const Signup = () => {
       return;
     }
     
+    setIsSigningUp(true);
+    
     try {
       await signup(name, email, password, role);
-      navigate(role === "teacher" ? "/teacher" : "/student");
+      // Navigation will happen automatically via the auth state change in App.tsx
       toast("Account created successfully");
     } catch (error) {
-      toast("Signup failed", {
-        description: "There was an error creating your account."
-      });
+      console.error("Signup error:", error);
+      // Error toast will be shown in the signup function
+    } finally {
+      setIsSigningUp(false);
     }
   };
 
@@ -75,6 +80,7 @@ const Signup = () => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                minLength={6}
               />
             </div>
             <div className="space-y-2">
@@ -92,7 +98,9 @@ const Signup = () => {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col">
-            <Button type="submit" className="w-full">Sign up</Button>
+            <Button type="submit" className="w-full" disabled={isSigningUp}>
+              {isSigningUp ? "Creating account..." : "Sign up"}
+            </Button>
             <div className="mt-4 text-center text-sm">
               Already have an account?{" "}
               <Link to="/login" className="underline text-primary">

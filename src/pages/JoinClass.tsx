@@ -7,22 +7,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import AppNavbar from "@/components/AppNavbar";
+import { toast } from "sonner";
 
 const JoinClass = () => {
   const [classCode, setClassCode] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
   const { joinClass } = useClass();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!classCode.trim()) {
+      toast("Please enter a class code");
       return;
     }
     
-    const success = joinClass(classCode);
-    if (success) {
-      navigate("/student");
+    setIsJoining(true);
+    
+    try {
+      const success = await joinClass(classCode);
+      if (success) {
+        navigate("/student");
+      }
+    } catch (error) {
+      console.error("Failed to join class:", error);
+    } finally {
+      setIsJoining(false);
     }
   };
 
@@ -54,7 +65,9 @@ const JoinClass = () => {
               <Button variant="outline" type="button" onClick={() => navigate("/student")}>
                 Cancel
               </Button>
-              <Button type="submit">Join Class</Button>
+              <Button type="submit" disabled={isJoining}>
+                {isJoining ? "Joining..." : "Join Class"}
+              </Button>
             </CardFooter>
           </form>
         </Card>

@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -13,6 +14,7 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("student");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -26,14 +28,17 @@ const Login = () => {
       return;
     }
     
+    setIsLoggingIn(true);
+    
     try {
-      await login(email, password, role);
-      navigate(role === "teacher" ? "/teacher" : "/student");
+      await login(email, password);
+      // Navigation will happen automatically via the auth state change in App.tsx
       toast("Login successful");
     } catch (error) {
-      toast("Login failed", {
-        description: "Please check your credentials and try again."
-      });
+      console.error("Login error:", error);
+      // Error toast will be shown in the login function
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -82,7 +87,9 @@ const Login = () => {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col">
-            <Button type="submit" className="w-full">Sign in</Button>
+            <Button type="submit" className="w-full" disabled={isLoggingIn}>
+              {isLoggingIn ? "Signing in..." : "Sign in"}
+            </Button>
             <div className="mt-4 text-center text-sm">
               Don't have an account?{" "}
               <Link to="/signup" className="underline text-primary">
