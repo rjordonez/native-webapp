@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useClass } from "@/context/ClassContext"; 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,12 +10,14 @@ import { useEffect, useState } from "react";
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
+  const { classId } = useParams();
   const { 
     getClassesByUser, 
     getAssignmentsByClass, 
     getAssignmentStats,
     getStudentsByClass,
     getAssignmentSubmissions,
+    getClassById,
     loading 
   } = useClass();
   
@@ -24,6 +26,23 @@ const TeacherDashboard = () => {
   const [classDetails, setClassDetails] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [submissionTotals, setSubmissionTotals] = useState({}); // New state for totals
+
+  // Load selected class from URL on mount or refresh
+  useEffect(() => {
+    const loadSelectedClass = async () => {
+      if (classId && !loading) {
+        const classData = await getClassById(classId);
+        if (classData) {
+          setSelectedClass(classData);
+        } else {
+          navigate("/"); // Redirect to dashboard if class not found
+        }
+      } else if (!classId) {
+        setSelectedClass(null); // Base dashboard state
+      }
+    };
+    loadSelectedClass();
+  }, [classId, loading, getClassById, navigate]);
 
   // Calculate submission totals for each class
   useEffect(() => {

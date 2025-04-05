@@ -84,7 +84,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (error) throw error;
       
       if (data) {
-        setSubmissions(data.map(s => ({
+        const formattedSubmissions = data.map(s => ({
           id: s.id.toString(),
           assignmentId: s.assignment_id.toString(),
           studentId: s.student_id,
@@ -95,17 +95,26 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             reviewed: (s.feedback as { [key: string]: any }).reviewed ?? false
           } : { reviewed: false },
           submittedAt: s.submitted_at
-        })));
+        }));
+        
+        setSubmissions(formattedSubmissions);
+        return formattedSubmissions;
       }
+      return [];
     } catch (error) {
       console.error('Error loading submissions:', error);
       toast.error('Failed to load submissions');
+      return [];
     } finally {
       setSubmissionsLoading(false);
     }
   }, []);
 
   const loadTeacherSubmissions = useCallback(async (assignmentIds: string[]) => {
+    if (!assignmentIds || assignmentIds.length === 0) {
+      return [];
+    }
+    
     setSubmissionsLoading(true);
     try {
       const { data, error } = await supabase
@@ -116,7 +125,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (error) throw error;
       
       if (data) {
-        setSubmissions(data.map(s => ({
+        const formattedSubmissions = data.map(s => ({
           id: s.id.toString(),
           assignmentId: s.assignment_id.toString(),
           studentId: s.student_id,
@@ -127,17 +136,26 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             reviewed: (s.feedback as { [key: string]: any }).reviewed ?? false
           } : { reviewed: false },
           submittedAt: s.submitted_at
-        })));
+        }));
+        
+        setSubmissions(formattedSubmissions);
+        return formattedSubmissions;
       }
+      return [];
     } catch (error) {
       console.error('Error loading teacher submissions:', error);
       toast.error('Failed to load submissions');
+      return [];
     } finally {
       setSubmissionsLoading(false);
     }
   }, []);
 
   const loadAssignments = useCallback(async (classIds: string[]) => {
+    if (!classIds || classIds.length === 0) {
+      return [];
+    }
+    
     try {
       const { data, error } = await supabase
         .from('assignments')
@@ -147,7 +165,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (error) throw error;
       
       if (data) {
-        setAssignments(data.map(a => ({
+        const formattedAssignments = data.map(a => ({
           id: a.id.toString(),
           classId: a.course_id,
           title: a.title,
@@ -155,11 +173,16 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           topic: a.topic || "",
           questions: a.questions,
           createdAt: a.created_at || new Date().toISOString(),
-        })));
+        }));
+        
+        setAssignments(formattedAssignments);
+        return formattedAssignments;
       }
+      return [];
     } catch (error) {
       console.error('Error loading assignments:', error);
       toast.error('Failed to load assignments');
+      return [];
     }
   }, []);
 
@@ -236,15 +259,16 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     
     try {
       setLoading(true);
+      // First load classes
       const loadedClasses = await loadClasses(user.id, profile.role);
       
       if (loadedClasses.length > 0) {
         const classIds = loadedClasses.map(c => c.id);
-        await loadAssignments(classIds);
         
-        // Get fresh assignments after loading
-        const loadedAssignments = assignments.filter(a => classIds.includes(a.classId));
+        // Then load assignments independent of state
+        const loadedAssignments = await loadAssignments(classIds);
         
+        // Finally load submissions based on role and the assignments we just loaded
         if (profile.role === 'student') {
           await loadSubmissions(user.id);
         } else if (loadedAssignments.length > 0) {
@@ -286,24 +310,65 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const getAssignmentStats = useCallback(async (assignmentId: string) => {
     try {
       const assignment = assignments.find(a => a.id === assignmentId);
-      if (!assignment) return { total: 0, submitted: 0, inProgress: 0, notStarted: 0 };
-
+      if (!assignment) {
+        // If we don't have the assignment in state, try to fetch it
+        const { data } = await supabase
+          .from('assignments')
+          .select('course_id')
+          .eq('id', parseInt(assignmentId))
+          .single();
+          
+        if (!data) {
+          return { total: 0, submitted: 0, inProgress: 0, notStarted: 0 };
+        }
+        
+        // Find the class for this assignment
+        const classData = classes.find(c => c.id === data.course_id);
+        if (!classData) {
+          return { total: 0, submitted: 0, inProgress: 0, notStarted: 0 };
+        }
+        
+        // Get fresh submission data for this assignment
+        const { data: submissionsData } = await supabase
+          .from('submissions')
+          .select('status')
+          .eq('assignment_id', parseInt(assignmentId));
+        
+        const totalStudents = classData.students.length || 0;
+        const submittedCount = submissionsData?.filter(s => s.status === "submitted").length || 0;
+        const inProgressCount = submissionsData?.filter(s => s.status === "in_progress").length || 0;
+        
+        return {
+          total: totalStudents,
+          submitted: submittedCount,
+          inProgress: inProgressCount,
+          notStarted: totalStudents - (submittedCount + inProgressCount)
+        };
+      }
+      
       const classData = classes.find(c => c.id === assignment.classId);
       const totalStudents = classData?.students.length || 0;
 
-      const assignmentSubmissions = submissions.filter(s => s.assignmentId === assignmentId);
-
+      // Get fresh submission data instead of relying on state
+      const { data: freshSubmissions } = await supabase
+        .from('submissions')
+        .select('status')
+        .eq('assignment_id', parseInt(assignmentId));
+      
+      const submittedCount = freshSubmissions?.filter(s => s.status === "submitted").length || 0;
+      const inProgressCount = freshSubmissions?.filter(s => s.status === "in_progress").length || 0;
+      
       return {
         total: totalStudents,
-        submitted: assignmentSubmissions.filter(s => s.status === "submitted").length,
-        inProgress: assignmentSubmissions.filter(s => s.status === "in_progress").length,
-        notStarted: totalStudents - assignmentSubmissions.length
+        submitted: submittedCount,
+        inProgress: inProgressCount,
+        notStarted: totalStudents - (submittedCount + inProgressCount)
       };
     } catch (error) {
       console.error('Error getting assignment stats:', error);
       return { total: 0, submitted: 0, inProgress: 0, notStarted: 0 };
     }
-  }, [assignments, classes, submissions]);
+  }, [assignments, classes]);
 
   const updateSubmission = useCallback(async (submission: Submission) => {
     if (!user) return;
@@ -399,6 +464,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const assignmentIdInt = parseInt(assignmentId, 10);
       if (isNaN(assignmentIdInt)) throw new Error('Invalid assignment ID');
       
+      // Always get fresh data from the database
       const { data: submissionsData, error } = await supabase
         .from('submissions')
         .select('*')
@@ -420,7 +486,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         studentNameMap.set(user.id, user.name || 'Unknown');
       });
       
-      return submissionsData.map(item => ({
+      const freshSubmissions = submissionsData.map(item => ({
         id: item.id.toString(),
         assignmentId,
         studentId: item.student_id,
@@ -430,6 +496,14 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         feedback: item.feedback as { comment?: string; reviewed?: boolean } | undefined,
         submittedAt: item.submitted_at
       }));
+      
+      // Update state with fresh data
+      setSubmissions(prev => {
+        const updated = prev.filter(s => s.assignmentId !== assignmentId);
+        return [...updated, ...freshSubmissions];
+      });
+      
+      return freshSubmissions;
     } catch (error) {
       console.error('Error loading submissions:', error);
       toast.error('Failed to load submissions');
@@ -437,16 +511,9 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  // Add this after the getAssignmentSubmissions function
   const getClassById = useCallback(async (classId: string) => {
     try {
-      // First, check if the class is already in the local state
-      const classData = classes.find(c => c.id === classId);
-      if (classData) {
-        return classData;
-      }
-
-      // If not found in local state, fetch from Supabase
+      // Always get fresh data from Supabase
       const { data, error } = await supabase
         .from('classes')
         .select('*')
@@ -469,10 +536,13 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           students: studentsData?.map(s => s.student_id) || [],
         };
 
-        // Optionally, update the local state with the fetched class
+        // Update the local state with the fetched class
         setClasses(prev => {
-          if (prev.some(c => c.id === transformedClass.id)) {
-            return prev; // Class already exists in state
+          const existingIndex = prev.findIndex(c => c.id === transformedClass.id);
+          if (existingIndex >= 0) {
+            const updated = [...prev];
+            updated[existingIndex] = transformedClass;
+            return updated;
           }
           return [...prev, transformedClass];
         });
@@ -486,7 +556,31 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       toast.error('Failed to load class details');
       return null;
     }
-  }, [classes]);
+  }, []);
+
+  const updateSubmissionFeedback = useCallback(async (submissionId: string, comment: string, reviewed: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('submissions')
+        .update({
+          feedback: { comment, reviewed }
+        })
+        .eq('id', submissionId);
+        
+      if (error) throw error;
+      
+      setSubmissions(prev => 
+        prev.map(s => s.id === submissionId ? { 
+          ...s, 
+          feedback: { comment, reviewed } 
+        } : s)
+      );
+      toast.success("Feedback saved successfully");
+    } catch (error) {
+      console.error('Error updating feedback:', error);
+      toast.error('Failed to save feedback');
+    }
+  }, []);
 
   return (
     <ClassContext.Provider 
@@ -623,15 +717,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         getSubmissionsByAssignment: (assignmentId: string) => submissions.filter(s => s.assignmentId === assignmentId),
         getAssignmentStats,
         updateSubmission,
-        updateSubmissionFeedback: async (submissionId: string, comment: string, reviewed: boolean) => {
-          setSubmissions(prev => 
-            prev.map(s => s.id === submissionId ? { 
-              ...s, 
-              feedback: { comment, reviewed } 
-            } : s)
-          );
-          toast("Feedback saved successfully");
-        },
+        updateSubmissionFeedback,
         uploadAudio: async (assignmentId: string, questionId: number, audioBlob: Blob) => {
           if (!user) return null;
           try {
@@ -666,7 +752,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         getCompletedAssignments,
         getStudentsByClass,
         getAssignmentSubmissions,
-        getClassById, // Add this line
+        getClassById,
       }}
     >
       {children}

@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -44,15 +43,12 @@ const ProtectedRoute = ({
     return <Navigate to="/login" />;
   }
 
-  // Changed from "user.role" to "profile?.role"
   if (requiredRole && profile?.role !== requiredRole) {
     return <Navigate to={profile?.role === "teacher" ? "/teacher" : "/student"} />;
   }
 
   return <>{children}</>;
 };
-
-
 
 const AppRoutes = () => {
   const { user } = useAuth();
@@ -71,6 +67,13 @@ const AppRoutes = () => {
       
       {/* Teacher routes */}
       <Route path="/teacher" element={
+        <ProtectedRoute requiredRole="teacher">
+          <TeacherDashboard />
+        </ProtectedRoute>
+      } />
+      
+      {/* Add the new route here */}
+      <Route path="/teacher/class/:classId" element={
         <ProtectedRoute requiredRole="teacher">
           <TeacherDashboard />
         </ProtectedRoute>
@@ -106,7 +109,6 @@ const AppRoutes = () => {
         </ProtectedRoute>
       } />
       
-      {/* Add this new route for teachers to view submissions */}
       <Route path="/teacher/submission/:id" element={
         <ProtectedRoute requiredRole="teacher">
           <StudentSubmissionView />
