@@ -84,7 +84,10 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           studentId: s.student_id,
           status: s.status as "not_started" | "in_progress" | "submitted",
           answers: s.answers as Array<{ questionId: number; audioUrl?: string }>,
-          feedback: s.feedback as { comment?: string; reviewed?: boolean } | undefined,
+          feedback: s.feedback ? { 
+            comment: (s.feedback as { [key: string]: any }).comment ?? '',
+            reviewed: (s.feedback as { [key: string]: any }).reviewed ?? false
+          } : { reviewed: false },
           submittedAt: s.submitted_at
         }));
         setSubmissions(transformedSubmissions);
