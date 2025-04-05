@@ -101,7 +101,7 @@ const TeacherDashboard = () => {
                 <Users size={16} className="mr-2" />
                 View Students
               </Button>
-              <Button onClick={() => navigate(`/class/${selectedClass.id}/create-assignment`)}>
+              <Button onClick={() => navigate("/create-assignment", { state: { classId: selectedClass.id } })}>
                 <PlusCircle size={16} className="mr-2" />
                 New Assignment
               </Button>
