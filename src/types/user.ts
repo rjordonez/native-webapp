@@ -27,7 +27,8 @@ export interface Assignment {
 }
 
 export interface Submission {
-  id: string;
+  id: string;               // This could be your auto-incremented ID (or the primary key)
+  submission_uid: string;   // Your custom unique identifier (e.g. "temp_abc123")
   assignmentId: string;
   studentId: string;
   status: "not_started" | "in_progress" | "submitted";

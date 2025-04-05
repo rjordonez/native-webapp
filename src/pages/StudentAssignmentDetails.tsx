@@ -11,7 +11,7 @@ import { ArrowLeft, Calendar, Clock, Mic, MicOff, ArrowRight, Check } from "luci
 import AppNavbar from "@/components/AppNavbar";
 import { format } from "date-fns";
 import { toast } from "sonner";
-
+import { sendToAnalysisAPI } from "@/lib/api-services";
 const StudentAssignmentDetails = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -133,6 +133,7 @@ const StudentAssignmentDetails = () => {
     if (!submission) {
       submission = {
         id: `temp_${Math.random().toString(36).substring(2, 9)}`,
+        submission_uid: `unique_${Math.random().toString(36).substring(2, 9)}`,
         assignmentId: assignment.id,
         studentId: user.id,
         status: "not_started",
@@ -199,37 +200,57 @@ const StudentAssignmentDetails = () => {
     }
   }, [currentQuestionIndex]);
 
-  const submitAssignment = useCallback(async () => {
-    if (!currentSubmission || !assignment) return;
-    
-    const allAnswered = currentSubmission.answers.every(answer => answer.audioUrl);
-    if (!allAnswered) {
-      toast.error("Please answer all questions before submitting.");
-      return;
-    }
-    
-    if (confirm("Are you sure you want to submit? You won't be able to make changes after.")) {
+// Import at the top of StudentAssignmentDetails.tsx
+
+
+// Then modify just the submitAssignment function in your component:
+const submitAssignment = useCallback(async () => {
+  if (!currentSubmission || !assignment) return;
+  
+  const allAnswered = currentSubmission.answers.every(answer => answer.audioUrl);
+  if (!allAnswered) {
+    toast.error("Please answer all questions before submitting.");
+    return;
+  }
+  
+  if (confirm("Are you sure you want to submit? You won't be able to make changes after.")) {
+    try {
+      const toastId = toast.loading("Submitting assignment...");
+      const updatedSubmission = {
+        ...currentSubmission,
+        status: "submitted" as const,
+        submittedAt: new Date().toISOString()
+      };
+      
+      // First update the submission status
+      await updateSubmission(updatedSubmission);
+      
+      // Then send the audio URLs to the analysis API
       try {
-        const toastId = toast.loading("Submitting assignment...");
-        const updatedSubmission = {
-          ...currentSubmission,
-          status: "submitted" as const,
-          submittedAt: new Date().toISOString()
-        };
-        
-        await updateSubmission(updatedSubmission);
-
-        
-        toast.dismiss(toastId);
-        toast.success("Assignment submitted successfully!");
-        navigate("/student");
-      } catch (error) {
-        console.error("Error submitting assignment:", error);
-        toast.error("Failed to submit. Please try again.");
+        // Get all the audio URLs from the answers
+        const audioUrls = updatedSubmission.answers
+          .map(answer => answer.audioUrl)
+          .filter(url => url) as string[];
+          
+        // Send to analysis API
+        await sendToAnalysisAPI(audioUrls, updatedSubmission.submission_uid);
+        console.log("Analysis request sent successfully");
+      } catch (apiError) {
+        // Log the error but don't fail the submission
+        console.error("Error sending to analysis API:", apiError);
+        // Optionally notify the user that analysis might be delayed
+        toast.warning("Your submission was saved, but audio analysis may be delayed.");
       }
+      
+      toast.dismiss(toastId);
+      toast.success("Assignment submitted successfully!");
+      navigate("/student");
+    } catch (error) {
+      console.error("Error submitting assignment:", error);
+      toast.error("Failed to submit. Please try again.");
     }
-  }, [currentSubmission, assignment, updateSubmission, navigate]);
-
+  }
+}, [currentSubmission, assignment, updateSubmission, navigate]);
   const getProgressPercentage = useCallback(() => {
     if (!currentSubmission || !assignment) return 0;
     const answeredCount = currentSubmission.answers.filter(a => a.audioUrl).length;
