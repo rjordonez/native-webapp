@@ -1,15 +1,211 @@
-
 import { useNavigate } from "react-router-dom";
 import { useClass } from "@/context/ClassContext"; 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import AppNavbar from "@/components/AppNavbar";
 import { PlusCircle, Users, BookOpen, CheckCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { useEffect, useState } from "react";
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
-  const { getClassesByUser, getAssignmentsByClass, getAssignmentStats, loading } = useClass();
+  const { 
+    getClassesByUser, 
+    getAssignmentsByClass, 
+    getAssignmentStats,
+    getStudentsByClass,
+    getAssignmentSubmissions,
+    loading 
+  } = useClass();
+  
   const classes = getClassesByUser();
+  const [selectedClass, setSelectedClass] = useState(null);
+  const [classDetails, setClassDetails] = useState(null);
+  const [submissions, setSubmissions] = useState([]);
+  const [submissionTotals, setSubmissionTotals] = useState({}); // New state for totals
+
+  // Calculate submission totals for each class
+  useEffect(() => {
+    const loadSubmissionTotals = async () => {
+      const totals = {};
+      for (const classItem of classes) {
+        const classAssignments = getAssignmentsByClass(classItem.id);
+        let total = 0;
+        for (const assignment of classAssignments) {
+          const stats = await getAssignmentStats(assignment.id); // Await the async function
+          total += stats.submitted || 0;
+        }
+        totals[classItem.id] = total;
+      }
+      setSubmissionTotals(totals);
+    };
+
+    if (classes.length > 0 && !loading) {
+      loadSubmissionTotals();
+    }
+  }, [classes, getAssignmentsByClass, getAssignmentStats, loading]);
+
+  useEffect(() => {
+    if (selectedClass) {
+      const loadDetails = async () => {
+        const assignments = getAssignmentsByClass(selectedClass.id);
+        const students = await getStudentsByClass(selectedClass.id);
+        
+        // Get stats for all assignments
+        const statsPromises = assignments.map(async (assignment) => {
+          return await getAssignmentStats(assignment.id); // Await stats
+        });
+        const assignmentStats = await Promise.all(statsPromises);
+
+        // Get submissions for all assignments
+        const allSubmissions = await Promise.all(
+          assignments.map(async (assignment) => {
+            const subs = await getAssignmentSubmissions(assignment.id);
+            return subs.map(s => ({
+              ...s,
+              assignmentTitle: assignment.title
+            }));
+          })
+        );
+        
+        setSubmissions(allSubmissions.flat());
+        setClassDetails({
+          students,
+          assignments,
+          stats: assignmentStats // Use resolved stats
+        });
+      };
+      
+      loadDetails();
+    }
+  }, [selectedClass, getAssignmentsByClass, getStudentsByClass, getAssignmentSubmissions, getAssignmentStats]);
+
+  if (selectedClass) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <AppNavbar />
+        <main className="flex-1 container py-8">
+          <Button 
+            variant="link" 
+            className="px-0 mb-4" 
+            onClick={() => setSelectedClass(null)}
+          >
+            ← Back to Dashboard
+          </Button>
+          
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-2xl font-bold">{selectedClass.name}</h1>
+            <div className="flex gap-3">
+              <Button onClick={() => navigate(`/class/${selectedClass.id}/students`)}>
+                <Users size={16} className="mr-2" />
+                View Students
+              </Button>
+              <Button onClick={() => navigate(`/class/${selectedClass.id}/create-assignment`)}>
+                <PlusCircle size={16} className="mr-2" />
+                New Assignment
+              </Button>
+            </div>
+          </div>
+          
+          {/* Assignment Stats */}
+          <div className="grid gap-6 mb-8">
+            {classDetails?.assignments.map((assignment, index) => {
+              const stats = classDetails.stats[index]; // Use pre-fetched stats
+              return (
+                <Card key={assignment.id}>
+                  <CardHeader>
+                    <CardTitle>{assignment.title}</CardTitle>
+                    <CardDescription>
+                      Topic: {assignment.topic} - Due: {new Date(assignment.dueDate).toLocaleDateString()}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-3 gap-4 mb-6">
+                      <div className="border rounded-lg p-4">
+                        <h3 className="text-sm font-medium mb-2">Total Students</h3>
+                        <p className="text-xl font-semibold">{classDetails.students.length}</p>
+                      </div>
+                      <div className="border rounded-lg p-4">
+                        <h3 className="text-sm font-medium mb-2">Submitted</h3>
+                        <p className="text-xl font-semibold flex items-center gap-1">
+                          <CheckCircle className="text-green-500" size={18} /> {stats.submitted || 0}
+                        </p>
+                      </div>
+                      <div className="border rounded-lg p-4">
+                        <h3 className="text-sm font-medium mb-2">In Progress</h3>
+                        <p className="text-xl font-semibold">{stats.inProgress || 0}</p>
+                      </div>
+                    </div>
+                    
+                    {/* Student Submissions Table */}
+                    <h3 className="text-lg font-medium mb-4">Student Submissions</h3>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Student Name</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Submitted At</TableHead>
+                          <TableHead>Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {classDetails.students.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-center py-8">
+                              No students enrolled in this class yet
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          classDetails.students.map((student) => {
+                            const submission = submissions.find(
+                              s => s.studentId === student.id && s.assignmentId === assignment.id
+                            );
+                            
+                            return (
+                              <TableRow key={student.id}>
+                                <TableCell>{student.name}</TableCell>
+                                <TableCell>
+                                  <Badge 
+                                    variant={
+                                      submission?.status === 'submitted' ? 'default' : 
+                                      submission?.status === 'in_progress' ? 'secondary' : 'outline'
+                                    }
+                                  >
+                                    {submission?.status === 'submitted' ? 'Submitted' :
+                                     submission?.status === 'in_progress' ? 'In Progress' : 'Not Started'}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  {submission?.submittedAt ? 
+                                    new Date(submission.submittedAt).toLocaleString() : '-'}
+                                </TableCell>
+                                <TableCell>
+                                  {submission?.status === 'submitted' && (
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => navigate(`/submission/${submission.id}`)}
+                                    >
+                                      Review
+                                    </Button>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -40,10 +236,7 @@ const TeacherDashboard = () => {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {classes.map((classItem) => {
               const classAssignments = getAssignmentsByClass(classItem.id);
-              const totalSubmissions = classAssignments.reduce((acc, assignment) => {
-                const stats = getAssignmentStats(assignment.id);
-                return acc + stats.submitted;
-              }, 0);
+              const totalSubmissions = submissionTotals[classItem.id] ?? 0; // Use pre-fetched total
               
               return (
                 <Card key={classItem.id} className="hover:bg-muted/50 transition">
@@ -71,7 +264,10 @@ const TeacherDashboard = () => {
                     </div>
                   </CardContent>
                   <CardFooter>
-                    <Button variant="outline" className="w-full" onClick={() => navigate(`/class/${classItem.id}`)}>
+                    <Button 
+                      className="w-full" 
+                      onClick={() => setSelectedClass(classItem)}
+                    >
                       View Details
                     </Button>
                   </CardFooter>

@@ -22,18 +22,20 @@ interface ClassContextType {
   ) => Promise<void>;
   getAssignmentsByClass: (classId: string) => Assignment[];
   getSubmissionsByAssignment: (assignmentId: string) => Submission[];
-  getAssignmentStats: (assignmentId: string) => { 
+  getAssignmentStats: (assignmentId: string) => Promise<{ 
     total: number; 
     submitted: number; 
     inProgress: number; 
     notStarted: number;
-  };
+  }>;
   updateSubmission: (submission: Submission) => Promise<void>;
   updateSubmissionFeedback: (submissionId: string, comment: string, reviewed: boolean) => Promise<void>;
   uploadAudio: (assignmentId: string, questionId: number, audioBlob: Blob) => Promise<string | null>;
   refreshSubmissions: () => Promise<void>;
   getPendingAssignments: (studentId: string) => Assignment[];
   getCompletedAssignments: (studentId: string) => Assignment[];
+  getStudentsByClass: (classId: string) => Promise<{id: string, name: string}[]>;
+  getAssignmentSubmissions: (assignmentId: string) => Promise<Submission[]>;
 }
 
 const ClassContext = createContext<ClassContextType>({
@@ -48,13 +50,15 @@ const ClassContext = createContext<ClassContextType>({
   createAssignment: async () => {},
   getAssignmentsByClass: () => [],
   getSubmissionsByAssignment: () => [],
-  getAssignmentStats: () => ({ total: 0, submitted: 0, inProgress: 0, notStarted: 0 }),
+  getAssignmentStats: async () => ({ total: 0, submitted: 0, inProgress: 0, notStarted: 0 }),
   updateSubmission: async () => {},
   updateSubmissionFeedback: async () => {},
   uploadAudio: async () => null,
   refreshSubmissions: async () => {},
   getPendingAssignments: () => [],
   getCompletedAssignments: () => [], 
+  getStudentsByClass: async () => [],      
+  getAssignmentSubmissions: async () => [],
 });
 
 export const useClass = () => useContext(ClassContext);
@@ -78,7 +82,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (error) throw error;
       
       if (data) {
-        const transformedSubmissions = data.map(s => ({
+        setSubmissions(data.map(s => ({
           id: s.id.toString(),
           assignmentId: s.assignment_id.toString(),
           studentId: s.student_id,
@@ -89,11 +93,42 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             reviewed: (s.feedback as { [key: string]: any }).reviewed ?? false
           } : { reviewed: false },
           submittedAt: s.submitted_at
-        }));
-        setSubmissions(transformedSubmissions);
+        })));
       }
     } catch (error) {
       console.error('Error loading submissions:', error);
+      toast.error('Failed to load submissions');
+    } finally {
+      setSubmissionsLoading(false);
+    }
+  }, []);
+
+  const loadTeacherSubmissions = useCallback(async (assignmentIds: string[]) => {
+    setSubmissionsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('submissions')
+        .select('id, assignment_id, student_id, status, answers, feedback, submitted_at')
+        .in('assignment_id', assignmentIds.map(id => parseInt(id)));
+      
+      if (error) throw error;
+      
+      if (data) {
+        setSubmissions(data.map(s => ({
+          id: s.id.toString(),
+          assignmentId: s.assignment_id.toString(),
+          studentId: s.student_id,
+          status: s.status as "not_started" | "in_progress" | "submitted",
+          answers: s.answers as Array<{ questionId: number; audioUrl?: string }>,
+          feedback: s.feedback ? { 
+            comment: (s.feedback as { [key: string]: any }).comment ?? '',
+            reviewed: (s.feedback as { [key: string]: any }).reviewed ?? false
+          } : { reviewed: false },
+          submittedAt: s.submitted_at
+        })));
+      }
+    } catch (error) {
+      console.error('Error loading teacher submissions:', error);
       toast.error('Failed to load submissions');
     } finally {
       setSubmissionsLoading(false);
@@ -205,8 +240,13 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const classIds = loadedClasses.map(c => c.id);
         await loadAssignments(classIds);
         
+        // Get fresh assignments after loading
+        const loadedAssignments = assignments.filter(a => classIds.includes(a.classId));
+        
         if (profile.role === 'student') {
           await loadSubmissions(user.id);
+        } else if (loadedAssignments.length > 0) {
+          await loadTeacherSubmissions(loadedAssignments.map(a => a.id));
         }
       }
     } catch (error) {
@@ -215,13 +255,12 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } finally {
       setLoading(false);
     }
-  }, [user, profile, loadClasses, loadAssignments, loadSubmissions]);
+  }, [user, profile, loadClasses, loadAssignments, loadSubmissions, loadTeacherSubmissions]);
 
   useEffect(() => {
     if (user && profile) {
       loadUserData();
-    } else if (!user) {
-      // Only reset if actually logging out
+    } else {
       setClasses([]);
       setAssignments([]);
       setSubmissions([]);
@@ -230,18 +269,44 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [user, profile, loadUserData]);
 
   const refreshSubmissions = useCallback(async () => {
-    if (user?.id) {
+    if (!user?.id) return;
+    
+    if (profile?.role === 'teacher') {
+      const assignmentIds = assignments.map(a => a.id);
+      if (assignmentIds.length > 0) {
+        await loadTeacherSubmissions(assignmentIds);
+      }
+    } else {
       await loadSubmissions(user.id);
     }
-  }, [user, loadSubmissions]);
+  }, [user, profile, assignments, loadSubmissions, loadTeacherSubmissions]);
+
+  const getAssignmentStats = useCallback(async (assignmentId: string) => {
+    try {
+      const assignment = assignments.find(a => a.id === assignmentId);
+      if (!assignment) return { total: 0, submitted: 0, inProgress: 0, notStarted: 0 };
+
+      const classData = classes.find(c => c.id === assignment.classId);
+      const totalStudents = classData?.students.length || 0;
+
+      const assignmentSubmissions = submissions.filter(s => s.assignmentId === assignmentId);
+
+      return {
+        total: totalStudents,
+        submitted: assignmentSubmissions.filter(s => s.status === "submitted").length,
+        inProgress: assignmentSubmissions.filter(s => s.status === "in_progress").length,
+        notStarted: totalStudents - assignmentSubmissions.length
+      };
+    } catch (error) {
+      console.error('Error getting assignment stats:', error);
+      return { total: 0, submitted: 0, inProgress: 0, notStarted: 0 };
+    }
+  }, [assignments, classes, submissions]);
 
   const updateSubmission = useCallback(async (submission: Submission) => {
     if (!user) return;
     
     try {
-      let submissionId: string | undefined;
-      
-      // Check for existing submission
       const { data: existingData } = await supabase
         .from('submissions')
         .select('id')
@@ -250,7 +315,6 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .maybeSingle();
       
       if (existingData) {
-        // Update existing
         const { error } = await supabase
           .from('submissions')
           .update({
@@ -262,10 +326,8 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           .eq('id', existingData.id);
         
         if (error) throw error;
-        submissionId = existingData.id.toString();
       } else {
-        // Create new
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('submissions')
           .insert({
             assignment_id: parseInt(submission.assignmentId),
@@ -274,53 +336,104 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             answers: submission.answers,
             submitted_at: submission.status === 'submitted' ? new Date().toISOString() : null,
             feedback: submission.feedback
-          })
-          .select()
-          .single();
+          });
         
         if (error) throw error;
-        submissionId = data.id.toString();
       }
       
-      // Refresh to get latest state
       await refreshSubmissions();
-      
-      toast.success(
-        submission.status === 'submitted' 
-          ? "Assignment submitted successfully!" 
-          : "Progress saved"
-      );
+      toast.success(submission.status === 'submitted' ? "Assignment submitted!" : "Progress saved");
     } catch (error: any) {
       console.error('Error updating submission:', error);
-      toast.error('Failed to update submission', { 
-        description: error.message || 'Please try again' 
-      });
+      toast.error('Failed to update submission', { description: error.message });
     }
   }, [user, refreshSubmissions]);
 
   const getPendingAssignments = useCallback((studentId: string): Assignment[] => {
-    if (!studentId) return [];
     return assignments.filter(assignment => {
-      const submission = submissions.find(s => 
-        s.assignmentId === assignment.id && 
-        s.studentId === studentId
-      );
+      const submission = submissions.find(s => s.assignmentId === assignment.id && s.studentId === studentId);
       return !submission || submission.status !== "submitted";
     });
   }, [assignments, submissions]);
 
   const getCompletedAssignments = useCallback((studentId: string): Assignment[] => {
-    if (!studentId) return [];
     return assignments.filter(assignment => {
-      const submission = submissions.find(s => 
-        s.assignmentId === assignment.id && 
-        s.studentId === studentId
-      );
+      const submission = submissions.find(s => s.assignmentId === assignment.id && s.studentId === studentId);
       return submission?.status === "submitted";
     });
   }, [assignments, submissions]);
 
-  // ... (other existing methods remain unchanged) ...
+  const getStudentsByClass = useCallback(async (classId: string) => {
+    try {
+      const { data: enrollments, error } = await supabase
+        .from('students_classes')
+        .select('student_id')
+        .eq('class_id', classId);
+      
+      if (error) throw error;
+      if (!enrollments || enrollments.length === 0) return [];
+  
+      const studentIds = enrollments.map(e => e.student_id);
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, name')
+        .in('id', studentIds);
+      
+      if (usersError) throw usersError;
+      
+      return usersData?.map(user => ({
+        id: user.id,
+        name: user.name || 'Unknown'
+      })) || [];
+    } catch (error) {
+      console.error('Error loading students:', error);
+      toast.error('Failed to load students');
+      return [];
+    }
+  }, []);
+
+  const getAssignmentSubmissions = useCallback(async (assignmentId: string) => {
+    try {
+      const assignmentIdInt = parseInt(assignmentId, 10);
+      if (isNaN(assignmentIdInt)) throw new Error('Invalid assignment ID');
+      
+      const { data: submissionsData, error } = await supabase
+        .from('submissions')
+        .select('*')
+        .eq('assignment_id', assignmentIdInt);
+      
+      if (error) throw error;
+      if (!submissionsData) return [];
+      
+      const studentIds = submissionsData.map(s => s.student_id);
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, name')
+        .in('id', studentIds);
+      
+      if (usersError) throw usersError;
+      
+      const studentNameMap = new Map();
+      usersData?.forEach(user => {
+        studentNameMap.set(user.id, user.name || 'Unknown');
+      });
+      
+      return submissionsData.map(item => ({
+        id: item.id.toString(),
+        assignmentId,
+        studentId: item.student_id,
+        studentName: studentNameMap.get(item.student_id) || 'Unknown',
+        status: item.status as "not_started" | "in_progress" | "submitted",
+        answers: item.answers as Array<{ questionId: number; audioUrl?: string }>,
+        feedback: item.feedback as { comment?: string; reviewed?: boolean } | undefined,
+        submittedAt: item.submitted_at
+      }));
+    } catch (error) {
+      console.error('Error loading submissions:', error);
+      toast.error('Failed to load submissions');
+      return [];
+    }
+  }, []);
 
   return (
     <ClassContext.Provider 
@@ -368,7 +481,6 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             
             if (classError) throw classError;
             
-            // Check if already joined
             const { data: existing } = await supabase
               .from('students_classes')
               .select('*')
@@ -380,14 +492,12 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               return true;
             }
             
-            // Join class
             const { error: joinError } = await supabase
               .from('students_classes')
               .insert({ class_id: classData.id, student_id: user.id });
             
             if (joinError) throw joinError;
             
-            // Update local state
             setClasses(prev => {
               const existingClass = prev.find(c => c.id === classData.id);
               if (existingClass) {
@@ -456,19 +566,9 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             toast.error('Failed to create assignment', { description: error.message });
           }
         },
-        getAssignmentsByClass: (classId: string) => 
-          assignments.filter(a => a.classId === classId),
-        getSubmissionsByAssignment: (assignmentId: string) => 
-          submissions.filter(s => s.assignmentId === assignmentId),
-        getAssignmentStats: (assignmentId: string) => {
-          const assignmentSubmissions = submissions.filter(s => s.assignmentId === assignmentId);
-          return {
-            total: assignmentSubmissions.length,
-            submitted: assignmentSubmissions.filter(s => s.status === "submitted").length,
-            inProgress: assignmentSubmissions.filter(s => s.status === "in_progress").length,
-            notStarted: assignmentSubmissions.filter(s => s.status === "not_started").length,
-          };
-        },
+        getAssignmentsByClass: (classId: string) => assignments.filter(a => a.classId === classId),
+        getSubmissionsByAssignment: (assignmentId: string) => submissions.filter(s => s.assignmentId === assignmentId),
+        getAssignmentStats,
         updateSubmission,
         updateSubmissionFeedback: async (submissionId: string, comment: string, reviewed: boolean) => {
           setSubmissions(prev => 
@@ -511,6 +611,8 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         refreshSubmissions,
         getPendingAssignments,
         getCompletedAssignments,
+        getStudentsByClass,
+        getAssignmentSubmissions,
       }}
     >
       {children}
