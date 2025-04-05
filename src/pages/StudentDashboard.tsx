@@ -7,65 +7,53 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock } from "lucide-react";
 import AppNavbar from "@/components/AppNavbar";
 import { formatDistanceToNow } from "date-fns";
+import { useCallback } from "react";
 
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { getClassesByUser, assignments, submissions, loading } = useClass();
+  const { 
+    getClassesByUser, 
+    getPendingAssignments, 
+    getCompletedAssignments,
+    submissions,
+    loading,
+    assignments
+  } = useClass();
   
   const classes = getClassesByUser();
-  
-  // Get all assignments for the classes the student is enrolled in
-  const studentAssignments = assignments.filter(
-    assignment => classes.some(c => c.id === assignment.classId)
-  );
-  
-  // Get all submissions made by this student
-  const studentSubmissions = submissions.filter(
-    submission => submission.studentId === user?.id
-  );
-  
-  // Split assignments into pending and completed
-  const pendingAssignments = studentAssignments.filter(assignment => {
-    const submission = studentSubmissions.find(s => s.assignmentId === assignment.id);
-    return !submission || submission.status !== "submitted";
-  });
-  
-  const completedAssignments = studentAssignments.filter(assignment => {
-    const submission = studentSubmissions.find(s => s.assignmentId === assignment.id);
-    return submission && submission.status === "submitted";
-  });
-  
-  // Find the submission status for an assignment
-  const getSubmissionStatus = (assignmentId: string) => {
-    const submission = studentSubmissions.find(s => s.assignmentId === assignmentId);
-    if (!submission) return "not_started";
-    return submission.status;
-  };
+  const pendingAssignments = getPendingAssignments(user?.id || '');
+  const completedAssignments = getCompletedAssignments(user?.id || '');
 
-  // Format due date
-  const formatDueDate = (dateString: string) => {
+  const getSubmissionStatus = useCallback((assignmentId: string) => {
+    const submission = submissions.find(s => 
+      s.assignmentId === assignmentId && 
+      s.studentId === user?.id
+    );
+    return submission?.status || "not_started";
+  }, [submissions, user?.id]);
+
+  const formatDueDate = useCallback((dateString: string) => {
     try {
       const dueDate = new Date(dateString);
       return formatDistanceToNow(dueDate, { addSuffix: true });
     } catch (error) {
       return dateString;
     }
-  };
+  }, []);
 
-  // Get status badge
-  const getStatusBadge = (status: "not_started" | "in_progress" | "submitted") => {
+  const getStatusBadge = useCallback((status: "not_started" | "in_progress" | "submitted") => {
     switch (status) {
       case "not_started":
         return <Badge variant="outline" className="ml-2">Not Started</Badge>;
       case "in_progress":
         return <Badge variant="secondary" className="ml-2">In Progress</Badge>;
       case "submitted":
-        return <Badge variant="default" className="bg-green-500 ml-2">Submitted</Badge>;
+        return <Badge variant="default" className="bg-green-500 hover:bg-green-600 ml-2">Submitted</Badge>;
       default:
         return null;
     }
-  };
+  }, []);
 
   if (loading) {
     return (
@@ -107,11 +95,15 @@ const StudentDashboard = () => {
                     </CardHeader>
                     <CardContent>
                       <p className="text-sm text-muted-foreground">
-                        {studentAssignments.filter(a => a.classId === classItem.id).length} assignments
+                        {assignments.filter(a => a.classId === classItem.id).length} assignments
                       </p>
                     </CardContent>
                     <CardFooter>
-                      <Button variant="outline" className="w-full" onClick={() => navigate(`/student/class/${classItem.id}`)}>
+                      <Button 
+                        variant="outline" 
+                        className="w-full" 
+                        onClick={() => navigate(`/student/class/${classItem.id}`)}
+                      >
                         View Class
                       </Button>
                     </CardFooter>
@@ -174,21 +166,30 @@ const StudentDashboard = () => {
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                   {completedAssignments.map((assignment) => {
                     const classItem = classes.find(c => c.id === assignment.classId);
-                    const submission = studentSubmissions.find(s => s.assignmentId === assignment.id);
+                    const submission = submissions.find(s => 
+                      s.assignmentId === assignment.id && 
+                      s.studentId === user?.id
+                    );
                     
                     return (
                       <Card key={assignment.id} className="hover:shadow-md transition-shadow">
                         <CardHeader>
                           <div className="flex justify-between items-start">
                             <CardTitle className="truncate">{assignment.title}</CardTitle>
-                            <Badge variant="default" className="bg-green-500">Submitted</Badge>
+                            <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                              Submitted
+                            </Badge>
                           </div>
                           <CardDescription>{classItem?.name}</CardDescription>
                         </CardHeader>
                         <CardContent>
                           <div className="flex items-center text-sm text-muted-foreground mb-2">
                             <Calendar className="mr-2 h-4 w-4" />
-                            <span>Submitted {submission?.submittedAt ? formatDistanceToNow(new Date(submission.submittedAt), { addSuffix: true }) : 'recently'}</span>
+                            <span>
+                              Submitted {submission?.submittedAt ? 
+                                formatDistanceToNow(new Date(submission.submittedAt), { addSuffix: true }) : 
+                                'recently'}
+                            </span>
                           </div>
                           {submission?.feedback?.reviewed && (
                             <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">

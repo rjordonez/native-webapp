@@ -1,5 +1,5 @@
-import React, { createContext, useState, useContext, useEffect } from "react";
-import { Class, Assignment, Submission, mockStudents, mockTopics, mockQuestions } from "@/types/user";
+import React, { createContext, useState, useContext, useEffect, useCallback } from "react";
+import { Class, Assignment, Submission } from "@/types/user";
 import { useAuth } from "./AuthContext";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,6 +9,7 @@ interface ClassContextType {
   assignments: Assignment[];
   submissions: Submission[];
   loading: boolean;
+  submissionsLoading: boolean;
   createClass: (name: string) => Promise<void>;
   joinClass: (code: string) => Promise<boolean>;
   getClassesByUser: () => Class[];
@@ -30,6 +31,9 @@ interface ClassContextType {
   updateSubmission: (submission: Submission) => Promise<void>;
   updateSubmissionFeedback: (submissionId: string, comment: string, reviewed: boolean) => Promise<void>;
   uploadAudio: (assignmentId: string, questionId: number, audioBlob: Blob) => Promise<string | null>;
+  refreshSubmissions: () => Promise<void>;
+  getPendingAssignments: (studentId: string) => Assignment[];
+  getCompletedAssignments: (studentId: string) => Assignment[];
 }
 
 const ClassContext = createContext<ClassContextType>({
@@ -37,6 +41,7 @@ const ClassContext = createContext<ClassContextType>({
   assignments: [],
   submissions: [],
   loading: true,
+  submissionsLoading: false,
   createClass: async () => {},
   joinClass: async () => false,
   getClassesByUser: () => [],
@@ -47,6 +52,9 @@ const ClassContext = createContext<ClassContextType>({
   updateSubmission: async () => {},
   updateSubmissionFeedback: async () => {},
   uploadAudio: async () => null,
+  refreshSubmissions: async () => {},
+  getPendingAssignments: () => [],
+  getCompletedAssignments: () => [], 
 });
 
 export const useClass = () => useContext(ClassContext);
@@ -56,425 +64,191 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [submissionsLoading, setSubmissionsLoading] = useState<boolean>(false);
   const { user, profile } = useAuth();
 
-  useEffect(() => {
-    if (user && profile) {
-      loadUserData();
-    } else {
-      // Reset data when not authenticated
-      setClasses([]);
-      setAssignments([]);
-      setSubmissions([]);
-      setLoading(false);
-    }
-  }, [user, profile]);
-
-  const loadUserData = async () => {
-    if (!user) return;
-      
+  const loadSubmissions = useCallback(async (userId: string) => {
+    setSubmissionsLoading(true);
     try {
-      setLoading(true);
-      console.log("Loading classes data for user:", user.id, "with role:", profile?.role);
+      const { data, error } = await supabase
+        .from('submissions')
+        .select('id, assignment_id, student_id, status, answers, feedback, submitted_at')
+        .eq('student_id', userId);
       
-      // For teachers, fetch their classes
-      if (profile?.role === 'teacher') {
-        const { data: teacherClasses, error: teacherClassesError } = await supabase
+      if (error) throw error;
+      
+      if (data) {
+        const transformedSubmissions = data.map(s => ({
+          id: s.id.toString(),
+          assignmentId: s.assignment_id.toString(),
+          studentId: s.student_id,
+          status: s.status as "not_started" | "in_progress" | "submitted",
+          answers: s.answers as Array<{ questionId: number; audioUrl?: string }>,
+          feedback: s.feedback as { comment?: string; reviewed?: boolean } | undefined,
+          submittedAt: s.submitted_at
+        }));
+        setSubmissions(transformedSubmissions);
+      }
+    } catch (error) {
+      console.error('Error loading submissions:', error);
+      toast.error('Failed to load submissions');
+    } finally {
+      setSubmissionsLoading(false);
+    }
+  }, []);
+
+  const loadAssignments = useCallback(async (classIds: string[]) => {
+    try {
+      const { data, error } = await supabase
+        .from('assignments')
+        .select('*')
+        .in('course_id', classIds);
+      
+      if (error) throw error;
+      
+      if (data) {
+        setAssignments(data.map(a => ({
+          id: a.id.toString(),
+          classId: a.course_id,
+          title: a.title,
+          dueDate: a.due_date || "",
+          topic: a.topic || "",
+          questions: a.questions,
+          createdAt: a.created_at || new Date().toISOString(),
+        })));
+      }
+    } catch (error) {
+      console.error('Error loading assignments:', error);
+      toast.error('Failed to load assignments');
+    }
+  }, []);
+
+  const loadClasses = useCallback(async (userId: string, role: string) => {
+    try {
+      if (role === 'teacher') {
+        const { data, error } = await supabase
           .from('classes')
           .select('*')
-          .eq('teacher_id', user.id);
+          .eq('teacher_id', userId);
         
-        if (teacherClassesError) {
-          console.error('Error loading teacher classes:', teacherClassesError);
-        } else if (teacherClasses) {
-          console.log("Teacher classes loaded:", teacherClasses.length);
-          const transformedClasses = teacherClasses.map(c => ({
-            id: c.id,
-            name: c.name,
-            code: c.class_code,
-            teacherId: c.teacher_id,
-            students: []
+        if (error) throw error;
+        
+        if (data) {
+          const transformedClasses = await Promise.all(data.map(async c => {
+            const { data: studentsData } = await supabase
+              .from('students_classes')
+              .select('student_id')
+              .eq('class_id', c.id);
+            
+            return {
+              id: c.id,
+              name: c.name,
+              code: c.class_code,
+              teacherId: c.teacher_id,
+              students: studentsData?.map(s => s.student_id) || []
+            };
           }));
           
           setClasses(transformedClasses);
-          
-          // Load students for each class
-          for (const cls of transformedClasses) {
-            const { data: studentsData, error: studentsError } = await supabase
-              .from('students_classes')
-              .select('student_id')
-              .eq('class_id', cls.id);
-              
-            if (studentsError) {
-              console.error('Error loading students for class:', cls.id, studentsError);
-            } else if (studentsData) {
-              cls.students = studentsData.map(s => s.student_id);
-            }
-          }
-  
-          // Load assignments for teacher's classes
-          if (transformedClasses.length > 0) {
-            const classIds = transformedClasses.map(c => c.id);
-            
-            const { data: assignmentsData, error: assignmentsError } = await supabase
-              .from('assignments')
-              .select('*')
-              .in('course_id', classIds);
-            
-            if (assignmentsError) {
-              console.error('Error loading assignments:', assignmentsError);
-            } else if (assignmentsData && assignmentsData.length > 0) {
-              console.log("Assignments loaded:", assignmentsData.length);
-              
-              const transformedAssignments = assignmentsData.map(a => ({
-                id: a.id.toString(), // Convert number to string for your model
-                classId: a.course_id,
-                title: a.title,
-                dueDate: a.due_date || "",
-                topic: a.topic || "",
-                questions: a.questions,
-                createdAt: a.created_at || new Date().toISOString(),
-              }));
-              
-              setAssignments(transformedAssignments);
-            } else {
-              // No assignments yet
-              setAssignments([]);
-            }
-          }
+          return transformedClasses;
         }
-      } 
-      // For students, fetch classes they are enrolled in
-      else if (profile?.role === 'student') {
+      } else {
         const { data: enrollments, error: enrollmentsError } = await supabase
           .from('students_classes')
           .select('class_id')
-          .eq('student_id', user.id);
+          .eq('student_id', userId);
         
-        if (enrollmentsError) {
-          console.error('Error loading student enrollments:', enrollmentsError);
-        } else if (enrollments && enrollments.length > 0) {
+        if (enrollmentsError) throw enrollmentsError;
+        
+        if (enrollments) {
           const classIds = enrollments.map(e => e.class_id);
-          console.log("Student is enrolled in classes:", classIds);
-          
           const { data: studentClasses, error: studentClassesError } = await supabase
             .from('classes')
             .select('*')
             .in('id', classIds);
           
-          if (studentClassesError) {
-            console.error('Error loading student classes:', studentClassesError);
-          } else if (studentClasses) {
-            console.log("Student classes loaded:", studentClasses.length);
+          if (studentClassesError) throw studentClassesError;
+          
+          if (studentClasses) {
             const transformedClasses = studentClasses.map(c => ({
               id: c.id,
               name: c.name,
               code: c.class_code,
               teacherId: c.teacher_id,
-              students: [user.id]
+              students: [userId]
             }));
             
             setClasses(transformedClasses);
-  
-            // Load assignments for student's classes
-            if (transformedClasses.length > 0) {
-              const classIds = transformedClasses.map(c => c.id);
-              
-              const { data: assignmentsData, error: assignmentsError } = await supabase
-                .from('assignments')
-                .select('*')
-                .in('course_id', classIds);
-              
-              if (assignmentsError) {
-                console.error('Error loading assignments:', assignmentsError);
-              } else if (assignmentsData && assignmentsData.length > 0) {
-                console.log("Assignments loaded:", assignmentsData.length);
-                
-                const transformedAssignments = assignmentsData.map(a => ({
-                  id: a.id.toString(),
-                  classId: a.course_id,
-                  title: a.title,
-                  dueDate: a.due_date || "",
-                  topic: a.topic || "",
-                  questions: a.questions,
-                  createdAt: a.created_at || new Date().toISOString(),
-                }));
-                
-                setAssignments(transformedAssignments);
-              } else {
-                // No assignments yet
-                setAssignments([]);
-              }
-            }
+            return transformedClasses;
           }
-        } else {
-          console.log("Student is not enrolled in any classes");
-          setClasses([]);
         }
       }
-  
+      return [];
+    } catch (error) {
+      console.error('Error loading classes:', error);
+      toast.error('Failed to load classes');
+      return [];
+    }
+  }, []);
+
+  const loadUserData = useCallback(async () => {
+    if (!user || !profile) return;
+    
+    try {
+      setLoading(true);
+      const loadedClasses = await loadClasses(user.id, profile.role);
+      
+      if (loadedClasses.length > 0) {
+        const classIds = loadedClasses.map(c => c.id);
+        await loadAssignments(classIds);
+        
+        if (profile.role === 'student') {
+          await loadSubmissions(user.id);
+        }
+      }
     } catch (error) {
       console.error('Error loading user data:', error);
-      toast.error('Error loading data');
+      toast.error('Failed to load user data');
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, profile, loadClasses, loadAssignments, loadSubmissions]);
 
-  const createClass = async (name: string) => {
-    if (!user) return;
-
-    try {
-      // Generate a random 6-digit code
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      const { data, error } = await supabase
-        .from('classes')
-        .insert({
-          name,
-          class_code: code,
-          teacher_id: user.id,
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      if (data) {
-        const newClass: Class = {
-          id: data.id,
-          name: data.name,
-          code: data.class_code,
-          teacherId: data.teacher_id,
-          students: [],
-        };
-        
-        setClasses(prevClasses => [...prevClasses, newClass]);
-        toast.success(`Class created with code: ${code}`);
-      }
-    } catch (error: any) {
-      console.error('Error creating class:', error);
-      toast.error('Error creating class', {
-        description: error.message
-      });
+  useEffect(() => {
+    if (user && profile) {
+      loadUserData();
+    } else if (!user) {
+      // Only reset if actually logging out
+      setClasses([]);
+      setAssignments([]);
+      setSubmissions([]);
+      setLoading(false);
     }
-  };
+  }, [user, profile, loadUserData]);
 
-  const joinClass = async (code: string): Promise<boolean> => {
-    if (!user) return false;
-
-    try {
-      console.log("Attempting to join class with code:", code);
-      // Find the class with this code
-      const { data: classData, error: classError } = await supabase
-        .from('classes')
-        .select('*')
-        .eq('class_code', code)
-        .single();
-      
-      if (classError) {
-        console.error('Error finding class with code:', code, classError);
-        if (classError.code === 'PGRST116') {
-          toast.error("Class not found", {
-            description: "Please check the class code and try again."
-          });
-        } else {
-          throw classError;
-        }
-        return false;
-      }
-      
-      console.log("Found class:", classData);
-      
-      // Check if already joined
-      const { data: existingData, error: existingError } = await supabase
-        .from('students_classes')
-        .select('*')
-        .eq('class_id', classData.id)
-        .eq('student_id', user.id);
-      
-      if (existingError) {
-        console.error('Error checking existing enrollment:', existingError);
-        throw existingError;
-      }
-      
-      if (existingData && existingData.length > 0) {
-        console.log("Student already enrolled in class");
-        toast.info("Already joined", {
-          description: "You are already a member of this class."
-        });
-        return true; // Return true because technically they are in the class
-      }
-      
-      // Join the class
-      const { error: joinError } = await supabase
-        .from('students_classes')
-        .insert({
-          class_id: classData.id,
-          student_id: user.id
-        });
-      
-      if (joinError) {
-        console.error('Error joining class:', joinError);
-        throw joinError;
-      }
-      
-      console.log("Successfully joined class");
-      
-      // Update local classes data
-      const classToJoin = classes.find(c => c.id === classData.id);
-      if (classToJoin) {
-        const updatedClasses = classes.map(c => {
-          if (c.id === classToJoin.id) {
-            return {
-              ...c,
-              students: [...c.students, user.id]
-            };
-          }
-          return c;
-        });
-        
-        setClasses(updatedClasses);
-      } else {
-        // If class not in local state yet, add it
-        const newClass: Class = {
-          id: classData.id,
-          name: classData.name,
-          code: classData.class_code,
-          teacherId: classData.teacher_id,
-          students: [user.id],
-        };
-        
-        setClasses(prevClasses => [...prevClasses, newClass]);
-      }
-      
-      toast.success("Class joined successfully!");
-      return true;
-    } catch (error: any) {
-      console.error('Error joining class:', error);
-      toast.error('Error joining class', {
-        description: error.message
-      });
-      return false;
+  const refreshSubmissions = useCallback(async () => {
+    if (user?.id) {
+      await loadSubmissions(user.id);
     }
-  };
+  }, [user, loadSubmissions]);
 
-  // Helper function to fetch classes by user role (teacher or student)
-  const getClassesByUser = (): Class[] => {
-    return classes;
-  };
-
-  const createAssignment = async (
-    classId: string, 
-    title: string, 
-    dueDate: string, 
-    topic: string, 
-    questions: string[]
-  ) => {
-    if (!user || profile?.role !== "teacher") return;
-  
-    const classObj = classes.find(c => c.id === classId);
-    if (!classObj) {
-      toast.error("Class not found");
-      return;
-    }
-  
-    try {
-      // Now fully type-safe with our updated database types
-      const { data: assignmentData, error: assignmentError } = await supabase
-        .from('assignments')
-        .insert({
-          course_id: classId,
-          title,
-          questions,
-          due_date: dueDate,
-          topic,
-          created_by: user.id
-        })
-        .select()
-        .single();
-      
-      if (assignmentError) {
-        console.error('Error creating assignment:', assignmentError);
-        throw assignmentError;
-      }
-      
-      if (!assignmentData) {
-        throw new Error('Failed to create assignment');
-      }
-      
-      // Transform the DB data to match your frontend model
-      const newAssignment: Assignment = {
-        id: assignmentData.id.toString(), // Convert number to string for your model
-        classId: assignmentData.course_id,
-        title: assignmentData.title,
-        dueDate: assignmentData.due_date || dueDate,
-        topic: assignmentData.topic || topic,
-        questions: assignmentData.questions,
-        createdAt: assignmentData.created_at || new Date().toISOString(),
-      };
-  
-      // Update local state
-      setAssignments(prev => [...prev, newAssignment]);
-      
-      // Create submissions for each student
-      const newSubmissions = classObj.students.map(studentId => ({
-        id: Math.random().toString(36).substring(2, 9),
-        assignmentId: newAssignment.id,
-        studentId,
-        status: "not_started" as const,
-        answers: questions.map((_, index) => ({ questionId: index })),
-      }));
-  
-      setSubmissions([...submissions, ...newSubmissions]);
-  
-      toast.success("Assignment created successfully");
-    } catch (error: any) {
-      console.error('Error in createAssignment:', error);
-      toast.error('Failed to create assignment', {
-        description: error.message
-      });
-    }
-  };
-
-  const getAssignmentsByClass = (classId: string): Assignment[] => {
-    return assignments.filter(a => a.classId === classId);
-  };
-
-  const getSubmissionsByAssignment = (assignmentId: string): Submission[] => {
-    return submissions.filter(s => s.assignmentId === assignmentId);
-  };
-
-  const getAssignmentStats = (assignmentId: string) => {
-    const assignmentSubmissions = submissions.filter(s => s.assignmentId === assignmentId);
-    const total = assignmentSubmissions.length;
-    const submitted = assignmentSubmissions.filter(s => s.status === "submitted").length;
-    const inProgress = assignmentSubmissions.filter(s => s.status === "in_progress").length;
-    const notStarted = assignmentSubmissions.filter(s => s.status === "not_started").length;
-    
-    return { total, submitted, inProgress, notStarted };
-  };
-
-  const updateSubmission = async (submission: Submission) => {
+  const updateSubmission = useCallback(async (submission: Submission) => {
     if (!user) return;
     
     try {
-      // Check if this submission exists in Supabase
-      const { data: existingData, error: checkError } = await supabase
+      let submissionId: string | undefined;
+      
+      // Check for existing submission
+      const { data: existingData } = await supabase
         .from('submissions')
         .select('id')
         .eq('assignment_id', parseInt(submission.assignmentId))
         .eq('student_id', submission.studentId)
         .maybeSingle();
       
-      if (checkError) {
-        console.error('Error checking submission:', checkError);
-        throw checkError;
-      }
-      
       if (existingData) {
-        // Update existing submission
-        const { error: updateError } = await supabase
+        // Update existing
+        const { error } = await supabase
           .from('submissions')
           .update({
             status: submission.status,
@@ -484,13 +258,11 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           })
           .eq('id', existingData.id);
         
-        if (updateError) {
-          console.error('Error updating submission:', updateError);
-          throw updateError;
-        }
+        if (error) throw error;
+        submissionId = existingData.id.toString();
       } else {
-        // Create new submission
-        const { error: insertError } = await supabase
+        // Create new
+        const { data, error } = await supabase
           .from('submissions')
           .insert({
             assignment_id: parseInt(submission.assignmentId),
@@ -499,114 +271,243 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             answers: submission.answers,
             submitted_at: submission.status === 'submitted' ? new Date().toISOString() : null,
             feedback: submission.feedback
-          });
+          })
+          .select()
+          .single();
         
-        if (insertError) {
-          console.error('Error creating submission:', insertError);
-          throw insertError;
-        }
+        if (error) throw error;
+        submissionId = data.id.toString();
       }
       
-      // Update local state
-      setSubmissions(prev => 
-        prev.map(s => s.id === submission.id ? submission : s)
+      // Refresh to get latest state
+      await refreshSubmissions();
+      
+      toast.success(
+        submission.status === 'submitted' 
+          ? "Assignment submitted successfully!" 
+          : "Progress saved"
       );
-      
-      if (submission.status === 'submitted') {
-        toast.success("Submission completed!");
-      } else {
-        toast.success("Progress saved");
-      }
     } catch (error: any) {
-      console.error('Error in updateSubmission:', error);
-      toast.error('Failed to update submission', {
-        description: error.message
+      console.error('Error updating submission:', error);
+      toast.error('Failed to update submission', { 
+        description: error.message || 'Please try again' 
       });
-      throw error; // Re-throw so the calling component can handle it
     }
-  };
+  }, [user, refreshSubmissions]);
 
-  const updateSubmissionFeedback = async (submissionId: string, comment: string, reviewed: boolean) => {
-    setSubmissions(prev => 
-      prev.map(s => {
-        if (s.id === submissionId) {
-          return {
-            ...s,
-            feedback: {
-              comment,
-              reviewed
-            }
-          };
-        }
-        return s;
-      })
-    );
-    
-    toast("Feedback saved successfully");
-  };
+  const getPendingAssignments = useCallback((studentId: string): Assignment[] => {
+    if (!studentId) return [];
+    return assignments.filter(assignment => {
+      const submission = submissions.find(s => 
+        s.assignmentId === assignment.id && 
+        s.studentId === studentId
+      );
+      return !submission || submission.status !== "submitted";
+    });
+  }, [assignments, submissions]);
 
-  // Updated uploadAudio to store files in Supabase storage
-  const uploadAudio = async (assignmentId: string, questionId: number, audioBlob: Blob): Promise<string | null> => {
-    if (!user) return null;
-    
-    try {
-      const filePath = `${user.id}/${assignmentId}/${questionId}_${Date.now()}.webm`;
-      console.log("Uploading audio file to path:", filePath);
-      
-      const { data, error } = await supabase
-        .storage
-        .from('audio_recordings')
-        .upload(filePath, audioBlob, {
-          cacheControl: '3600',
-          upsert: true
-        });
-      
-      if (error) {
-        console.error('Error uploading audio to storage:', error);
-        throw error;
-      }
-      
-      if (data) {
-        // Get the public URL for the uploaded file
-        const { data: publicUrlData } = supabase
-          .storage
-          .from('audio_recordings')
-          .getPublicUrl(data.path);
-        
-        console.log("File uploaded successfully. Public URL:", publicUrlData.publicUrl);
-        return publicUrlData.publicUrl;
-      }
-      
-      return null;
-    } catch (error: any) {
-      console.error('Error uploading audio:', error);
-      toast.error('Error uploading audio', {
-        description: error.message
-      });
-      return null;
-    }
-  };
+  const getCompletedAssignments = useCallback((studentId: string): Assignment[] => {
+    if (!studentId) return [];
+    return assignments.filter(assignment => {
+      const submission = submissions.find(s => 
+        s.assignmentId === assignment.id && 
+        s.studentId === studentId
+      );
+      return submission?.status === "submitted";
+    });
+  }, [assignments, submissions]);
 
-  // Set up mock data if needed
-
+  // ... (other existing methods remain unchanged) ...
 
   return (
     <ClassContext.Provider 
       value={{ 
-        classes, 
-        assignments, 
+        classes,
+        assignments,
         submissions,
         loading,
-        createClass, 
-        joinClass, 
-        getClassesByUser,
-        createAssignment,
-        getAssignmentsByClass,
-        getSubmissionsByAssignment,
-        getAssignmentStats,
+        submissionsLoading,
+        createClass: async (name: string) => {
+          if (!user) return;
+          try {
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            const { data, error } = await supabase
+              .from('classes')
+              .insert({ name, class_code: code, teacher_id: user.id })
+              .select()
+              .single();
+            
+            if (error) throw error;
+            
+            if (data) {
+              setClasses(prev => [...prev, {
+                id: data.id,
+                name: data.name,
+                code: data.class_code,
+                teacherId: data.teacher_id,
+                students: [],
+              }]);
+              toast.success(`Class created with code: ${code}`);
+            }
+          } catch (error: any) {
+            console.error('Error creating class:', error);
+            toast.error('Error creating class', { description: error.message });
+          }
+        },
+        joinClass: async (code: string) => {
+          if (!user) return false;
+          try {
+            const { data: classData, error: classError } = await supabase
+              .from('classes')
+              .select('*')
+              .eq('class_code', code)
+              .single();
+            
+            if (classError) throw classError;
+            
+            // Check if already joined
+            const { data: existing } = await supabase
+              .from('students_classes')
+              .select('*')
+              .eq('class_id', classData.id)
+              .eq('student_id', user.id);
+            
+            if (existing && existing.length > 0) {
+              toast.info("Already joined this class");
+              return true;
+            }
+            
+            // Join class
+            const { error: joinError } = await supabase
+              .from('students_classes')
+              .insert({ class_id: classData.id, student_id: user.id });
+            
+            if (joinError) throw joinError;
+            
+            // Update local state
+            setClasses(prev => {
+              const existingClass = prev.find(c => c.id === classData.id);
+              if (existingClass) {
+                return prev.map(c => 
+                  c.id === classData.id 
+                    ? { ...c, students: [...c.students, user.id] } 
+                    : c
+                );
+              }
+              return [...prev, {
+                id: classData.id,
+                name: classData.name,
+                code: classData.class_code,
+                teacherId: classData.teacher_id,
+                students: [user.id],
+              }];
+            });
+            
+            toast.success("Class joined successfully!");
+            return true;
+          } catch (error: any) {
+            console.error('Error joining class:', error);
+            toast.error('Error joining class', { description: error.message });
+            return false;
+          }
+        },
+        getClassesByUser: () => classes,
+        createAssignment: async (
+          classId: string, 
+          title: string, 
+          dueDate: string, 
+          topic: string, 
+          questions: string[]
+        ) => {
+          if (!user || profile?.role !== "teacher") return;
+          try {
+            const { data, error } = await supabase
+              .from('assignments')
+              .insert({
+                course_id: classId,
+                title,
+                questions,
+                due_date: dueDate,
+                topic,
+                created_by: user.id
+              })
+              .select()
+              .single();
+            
+            if (error) throw error;
+            
+            if (data) {
+              setAssignments(prev => [...prev, {
+                id: data.id.toString(),
+                classId: data.course_id,
+                title: data.title,
+                dueDate: data.due_date || dueDate,
+                topic: data.topic || topic,
+                questions: data.questions,
+                createdAt: data.created_at || new Date().toISOString(),
+              }]);
+              toast.success("Assignment created successfully");
+            }
+          } catch (error: any) {
+            console.error('Error creating assignment:', error);
+            toast.error('Failed to create assignment', { description: error.message });
+          }
+        },
+        getAssignmentsByClass: (classId: string) => 
+          assignments.filter(a => a.classId === classId),
+        getSubmissionsByAssignment: (assignmentId: string) => 
+          submissions.filter(s => s.assignmentId === assignmentId),
+        getAssignmentStats: (assignmentId: string) => {
+          const assignmentSubmissions = submissions.filter(s => s.assignmentId === assignmentId);
+          return {
+            total: assignmentSubmissions.length,
+            submitted: assignmentSubmissions.filter(s => s.status === "submitted").length,
+            inProgress: assignmentSubmissions.filter(s => s.status === "in_progress").length,
+            notStarted: assignmentSubmissions.filter(s => s.status === "not_started").length,
+          };
+        },
         updateSubmission,
-        updateSubmissionFeedback,
-        uploadAudio
+        updateSubmissionFeedback: async (submissionId: string, comment: string, reviewed: boolean) => {
+          setSubmissions(prev => 
+            prev.map(s => s.id === submissionId ? { 
+              ...s, 
+              feedback: { comment, reviewed } 
+            } : s)
+          );
+          toast("Feedback saved successfully");
+        },
+        uploadAudio: async (assignmentId: string, questionId: number, audioBlob: Blob) => {
+          if (!user) return null;
+          try {
+            const filePath = `${user.id}/${assignmentId}/${questionId}_${Date.now()}.webm`;
+            const { data, error } = await supabase
+              .storage
+              .from('audio_recordings')
+              .upload(filePath, audioBlob, {
+                cacheControl: '3600',
+                upsert: true
+              });
+            
+            if (error) throw error;
+            
+            if (data) {
+              const { data: publicUrlData } = supabase
+                .storage
+                .from('audio_recordings')
+                .getPublicUrl(data.path);
+              
+              return publicUrlData.publicUrl;
+            }
+            return null;
+          } catch (error: any) {
+            console.error('Error uploading audio:', error);
+            toast.error('Error uploading audio', { description: error.message });
+            return null;
+          }
+        },
+        refreshSubmissions,
+        getPendingAssignments,
+        getCompletedAssignments,
       }}
     >
       {children}
