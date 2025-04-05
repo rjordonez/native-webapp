@@ -185,7 +185,7 @@ const TeacherDashboard = () => {
                                     <Button 
                                       variant="outline" 
                                       size="sm"
-                                      onClick={() => navigate(`/submission/${submission.id}`)}
+                                      onClick={() => navigate(`teacher/submission/${submission.id}`)}
                                     >
                                       Review
                                     </Button>

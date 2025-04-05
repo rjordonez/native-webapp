@@ -99,6 +99,13 @@ const AppRoutes = () => {
         </ProtectedRoute>
       } />
       
+      {/* Add this new route for teachers to view submissions */}
+      <Route path="/teacher/submission/:id" element={
+        <ProtectedRoute requiredRole="teacher">
+          <StudentSubmissionView />
+        </ProtectedRoute>
+      } />
+      
       {/* Student routes */}
       <Route path="/student" element={
         <ProtectedRoute requiredRole="student">
