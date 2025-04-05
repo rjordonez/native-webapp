@@ -20,6 +20,7 @@ import AssignmentDetails from "./pages/AssignmentDetails";
 import StudentClassView from "./pages/StudentClassView";
 import StudentAssignmentDetails from "./pages/StudentAssignmentDetails";
 import StudentSubmissionView from "./pages/StudentSubmissionView";
+import ClassStudentsView from "./pages/ClassStudentsView";
 
 const queryClient = new QueryClient();
 
@@ -87,6 +88,12 @@ const AppRoutes = () => {
         </ProtectedRoute>
       } />
       
+      <Route path="/class/:id/students" element={
+        <ProtectedRoute requiredRole="teacher">
+          <ClassStudentsView />
+        </ProtectedRoute>
+      } />
+
       <Route path="/create-assignment" element={
         <ProtectedRoute requiredRole="teacher">
           <CreateAssignment />

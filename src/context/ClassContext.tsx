@@ -36,6 +36,7 @@ interface ClassContextType {
   getCompletedAssignments: (studentId: string) => Assignment[];
   getStudentsByClass: (classId: string) => Promise<{id: string, name: string}[]>;
   getAssignmentSubmissions: (assignmentId: string) => Promise<Submission[]>;
+  getClassById: (classId: string) => Promise<Class | null>;
 }
 
 const ClassContext = createContext<ClassContextType>({
@@ -59,6 +60,7 @@ const ClassContext = createContext<ClassContextType>({
   getCompletedAssignments: () => [], 
   getStudentsByClass: async () => [],      
   getAssignmentSubmissions: async () => [],
+  getClassById: async () => null,
 });
 
 export const useClass = () => useContext(ClassContext);
@@ -435,6 +437,57 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
+  // Add this after the getAssignmentSubmissions function
+  const getClassById = useCallback(async (classId: string) => {
+    try {
+      // First, check if the class is already in the local state
+      const classData = classes.find(c => c.id === classId);
+      if (classData) {
+        return classData;
+      }
+
+      // If not found in local state, fetch from Supabase
+      const { data, error } = await supabase
+        .from('classes')
+        .select('*')
+        .eq('id', classId)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        const { data: studentsData } = await supabase
+          .from('students_classes')
+          .select('student_id')
+          .eq('class_id', data.id);
+
+        const transformedClass: Class = {
+          id: data.id,
+          name: data.name,
+          code: data.class_code,
+          teacherId: data.teacher_id,
+          students: studentsData?.map(s => s.student_id) || [],
+        };
+
+        // Optionally, update the local state with the fetched class
+        setClasses(prev => {
+          if (prev.some(c => c.id === transformedClass.id)) {
+            return prev; // Class already exists in state
+          }
+          return [...prev, transformedClass];
+        });
+
+        return transformedClass;
+      }
+
+      return null; // Class not found
+    } catch (error) {
+      console.error('Error fetching class by ID:', error);
+      toast.error('Failed to load class details');
+      return null;
+    }
+  }, [classes]);
+
   return (
     <ClassContext.Provider 
       value={{ 
@@ -613,9 +666,9 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         getCompletedAssignments,
         getStudentsByClass,
         getAssignmentSubmissions,
+        getClassById, // Add this line
       }}
     >
       {children}
     </ClassContext.Provider>
-  );
-};
+  )};
