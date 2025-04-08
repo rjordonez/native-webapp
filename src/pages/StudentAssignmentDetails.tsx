@@ -12,6 +12,7 @@ import AppNavbar from "@/components/AppNavbar";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { sendToAnalysisAPI } from "@/lib/api-services";
+
 const StudentAssignmentDetails = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -168,6 +169,7 @@ const StudentAssignmentDetails = () => {
     }
   }, []);
 
+  // Modified toggleRecording to clear previous recordings
   const toggleRecording = useCallback(() => {
     if (!mediaRecorderRef.current) {
       toast.error('Microphone not ready. Please refresh the page.');
@@ -177,12 +179,29 @@ const StudentAssignmentDetails = () => {
     if (isRecording) {
       stopRecording();
     } else {
+      // When starting a new recording, clear the previous saved recording for this question
+      if (audioUrls[currentQuestionIndex]) {
+        // Clear the saved audio URL from the current submission
+        setCurrentSubmission(prev => {
+          if (!prev) return prev;
+          const updatedAnswers = [...prev.answers];
+          updatedAnswers[currentQuestionIndex] = {
+            ...updatedAnswers[currentQuestionIndex],
+            audioUrl: ""  // Clear the audio URL
+          };
+          return {
+            ...prev,
+            answers: updatedAnswers
+          };
+        });
+      }
+      
       recordedChunksRef.current = [];
       setIsRecording(true);
       setTimeLeft(40);
       mediaRecorderRef.current.start(100);
     }
-  }, [isRecording, stopRecording]);
+  }, [isRecording, stopRecording, audioUrls, currentQuestionIndex]);
 
   const goToNextQuestion = useCallback(() => {
     if (assignment && currentQuestionIndex < assignment.questions.length - 1) {
@@ -200,57 +219,54 @@ const StudentAssignmentDetails = () => {
     }
   }, [currentQuestionIndex]);
 
-// Import at the top of StudentAssignmentDetails.tsx
-
-
-// Then modify just the submitAssignment function in your component:
-const submitAssignment = useCallback(async () => {
-  if (!currentSubmission || !assignment) return;
-  
-  const allAnswered = currentSubmission.answers.every(answer => answer.audioUrl);
-  if (!allAnswered) {
-    toast.error("Please answer all questions before submitting.");
-    return;
-  }
-  
-  if (confirm("Are you sure you want to submit? You won't be able to make changes after.")) {
-    try {
-      const toastId = toast.loading("Submitting assignment...");
-      const updatedSubmission = {
-        ...currentSubmission,
-        status: "submitted" as const,
-        submittedAt: new Date().toISOString()
-      };
-      
-      // First update the submission status
-      await updateSubmission(updatedSubmission);
-      
-      // Then send the audio URLs to the analysis API
-      try {
-        // Get all the audio URLs from the answers
-        const audioUrls = updatedSubmission.answers
-          .map(answer => answer.audioUrl)
-          .filter(url => url) as string[];
-          
-        // Send to analysis API
-        await sendToAnalysisAPI(audioUrls, updatedSubmission.submission_uid);
-        console.log("Analysis request sent successfully");
-      } catch (apiError) {
-        // Log the error but don't fail the submission
-        console.error("Error sending to analysis API:", apiError);
-        // Optionally notify the user that analysis might be delayed
-        toast.warning("Your submission was saved, but audio analysis may be delayed.");
-      }
-      
-      toast.dismiss(toastId);
-      toast.success("Assignment submitted successfully!");
-      navigate("/student");
-    } catch (error) {
-      console.error("Error submitting assignment:", error);
-      toast.error("Failed to submit. Please try again.");
+  const submitAssignment = useCallback(async () => {
+    if (!currentSubmission || !assignment) return;
+    
+    const allAnswered = currentSubmission.answers.every(answer => answer.audioUrl);
+    if (!allAnswered) {
+      toast.error("Please answer all questions before submitting.");
+      return;
     }
-  }
-}, [currentSubmission, assignment, updateSubmission, navigate]);
+    
+    if (confirm("Are you sure you want to submit? You won't be able to make changes after.")) {
+      try {
+        const toastId = toast.loading("Submitting assignment...");
+        const updatedSubmission = {
+          ...currentSubmission,
+          status: "submitted" as const,
+          submittedAt: new Date().toISOString()
+        };
+        
+        // First update the submission status
+        await updateSubmission(updatedSubmission);
+        
+        // Then send the audio URLs to the analysis API
+        try {
+          // Get all the audio URLs from the answers
+          const audioUrls = updatedSubmission.answers
+            .map(answer => answer.audioUrl)
+            .filter(url => url) as string[];
+            
+          // Send to analysis API
+          await sendToAnalysisAPI(audioUrls, updatedSubmission.submission_uid);
+          console.log("Analysis request sent successfully");
+        } catch (apiError) {
+          // Log the error but don't fail the submission
+          console.error("Error sending to analysis API:", apiError);
+          // Optionally notify the user that analysis might be delayed
+          toast.warning("Your submission was saved, but audio analysis may be delayed.");
+        }
+        
+        toast.dismiss(toastId);
+        toast.success("Assignment submitted successfully!");
+        navigate("/student");
+      } catch (error) {
+        console.error("Error submitting assignment:", error);
+        toast.error("Failed to submit. Please try again.");
+      }
+    }
+  }, [currentSubmission, assignment, updateSubmission, navigate]);
+
   const getProgressPercentage = useCallback(() => {
     if (!currentSubmission || !assignment) return 0;
     const answeredCount = currentSubmission.answers.filter(a => a.audioUrl).length;
