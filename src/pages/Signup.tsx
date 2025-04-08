@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -33,8 +32,14 @@ const Signup = () => {
     
     try {
       await signup(name, email, password, role);
-      // Navigation will happen automatically via the auth state change in App.tsx
       toast("Account created successfully");
+      
+      // Navigate to the appropriate dashboard based on user role
+      if (role === "teacher") {
+        navigate("/teacher");
+      } else {
+        navigate("/student");
+      }
     } catch (error) {
       console.error("Signup error:", error);
       // Error toast will be shown in the signup function
