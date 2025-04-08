@@ -3,12 +3,214 @@ import { useClass } from "@/context/ClassContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calendar, MessageSquare, Check } from "lucide-react";
+import { ArrowLeft, Calendar, MessageSquare, Check, Play } from "lucide-react";
 import AppNavbar from "@/components/AppNavbar";
 import { format } from "date-fns";
 import React, { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+
+// Voice Tutor Report Component
+const VoiceTutorReport = ({ data }) => {
+  // Helper function to format date
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString();
+  };
+
+  // Helper function to determine color based on score
+  const getScoreColor = (score) => {
+    if (score >= 80) return 'text-green-600';
+    if (score >= 60) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  // Helper function to get score label
+  const getScoreLabel = (score) => {
+    if (score >= 80) return 'Good';
+    if (score >= 60) return 'Needs Improvement';
+    return 'Critical';
+  };
+
+  const report = data;
+  const analysis = report.pronunciation_analysis && report.pronunciation_analysis.length > 0 
+    ? report.pronunciation_analysis[0] 
+    : null;
+    
+  if (!analysis) {
+    return (
+      <div className="bg-white shadow rounded-lg p-6 max-w-4xl mx-auto">
+        <h1 className="text-2xl font-bold text-gray-800">Voice Pronunciation Report</h1>
+        <p className="mt-4 text-gray-600">No pronunciation analysis data available.</p>
+      </div>
+    );
+  }
+  
+  // Calculate actual scores - in your real data these might already be populated
+  const calculateOverallScore = () => {
+    if (!analysis.word_details || analysis.word_details.length === 0) return 0;
+    const sum = analysis.word_details.reduce((acc, word) => acc + word.accuracy_score, 0);
+    return Math.round(sum / analysis.word_details.length);
+  };
+  
+  const overallScore = analysis.overall_pronunciation_score || calculateOverallScore();
+
+  return (
+    <div className="bg-white shadow rounded-lg p-6 max-w-4xl mx-auto">
+      {/* Header */}
+      <div className="border-b pb-4 mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">Voice Pronunciation Report</h1>
+        <div className="flex justify-between mt-2">
+          <p className="text-gray-500">Submission ID: {report.submission_id}</p>
+          <p className="text-gray-500">Date: {formatDate(report.timestamp)}</p>
+        </div>
+        <div className="mt-2 flex items-center">
+          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+            {report.status}
+          </span>
+          <span className="ml-4 text-gray-500">Audio Duration: {analysis.audio_duration}s</span>
+        </div>
+      </div>
+
+      {/* Audio Player */}
+      {analysis.url && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold mb-2">Recording</h2>
+          <div className="flex items-center">
+            <audio 
+              controls 
+              src={analysis.url} 
+              className="w-full"
+            >
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+        </div>
+      )}
+
+      {/* Transcript */}
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold mb-2">Transcript</h2>
+        <div className="bg-gray-50 p-4 rounded border">
+          <p className="text-gray-800">{analysis.transcript}</p>
+        </div>
+      </div>
+
+      {/* Overall Score */}
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold mb-2">Overall Score</h2>
+        <div className="flex items-center">
+          <div className={`text-4xl font-bold ${getScoreColor(overallScore)}`}>
+            {overallScore}
+          </div>
+          <div className="ml-4">
+            <div className="w-48 bg-gray-200 rounded-full h-4">
+              <div 
+                className={`h-4 rounded-full ${overallScore >= 80 ? 'bg-green-500' : overallScore >= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                style={{ width: `${overallScore}%` }}
+              ></div>
+            </div>
+            <p className={`text-sm mt-1 ${getScoreColor(overallScore)}`}>
+              {getScoreLabel(overallScore)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Word Details */}
+      {analysis.word_details && analysis.word_details.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold mb-2">Word Analysis</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Word</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Error Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Play</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {analysis.word_details.map((word, index) => (
+                  <tr key={index} className={word.error_type !== "None" ? "bg-red-50" : ""}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{word.word}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{word.offset.toFixed(2)}s</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <span className={`text-sm font-medium ${getScoreColor(word.accuracy_score)}`}>
+                          {word.accuracy_score}
+                        </span>
+                        <div className="ml-2 w-16 bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${word.accuracy_score >= 80 ? 'bg-green-500' : word.accuracy_score >= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                            style={{ width: `${word.accuracy_score}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {word.error_type !== "None" ? (
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                          {word.error_type}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                          Correct
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <button 
+                        className="p-1 rounded-full hover:bg-gray-100"
+                        onClick={() => {
+                          const audio = document.querySelector('audio');
+                          if (audio) {
+                            audio.currentTime = word.offset;
+                            audio.play();
+                          }
+                        }}
+                      >
+                        <Play size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Critical Errors */}
+      {analysis.critical_errors && analysis.critical_errors.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold mb-2">Critical Errors</h2>
+          <div className="bg-red-50 p-4 rounded border border-red-200">
+            <ul className="list-disc pl-5 space-y-2">
+              {analysis.critical_errors.map((error, index) => (
+                <li key={index} className="text-red-700">
+                  <span className="font-medium">{error.word}</span> - Score: {error.score} (at {error.timestamp.toFixed(2)}s)
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Improvement Suggestions */}
+      {analysis.improvement_suggestion && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold mb-2">Improvement Suggestions</h2>
+          <div className="bg-blue-50 p-4 rounded border border-blue-200">
+            <p className="text-blue-800">{analysis.improvement_suggestion}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const StudentSubmissionView = () => {
   const { id } = useParams<{ id: string }>();
@@ -80,7 +282,9 @@ const StudentSubmissionView = () => {
       fetchAnalysisResult();
     }
   }, [showReport, submission.submission_uid]);
+  
   console.log("Submission object:", submission);
+  
   // Render the standard audio responses
   const renderSubmissionView = () => (
     <div className="space-y-6">
@@ -122,7 +326,7 @@ const StudentSubmissionView = () => {
     </div>
   );
 
-  // Render the raw JSON from Supabase
+  // Render the Voice Tutor Report
   const renderReportView = () => {
     if (loading) {
       return (
@@ -142,13 +346,8 @@ const StudentSubmissionView = () => {
       return <div>No analysis result found.</div>;
     }
 
-    return (
-      <div className="p-4 bg-white border rounded">
-        <pre className="whitespace-pre-wrap text-sm">
-          {JSON.stringify(analysisResult, null, 2)}
-        </pre>
-      </div>
-    );
+    // Use our VoiceTutorReport component
+    return <VoiceTutorReport data={analysisResult} />;
   };
 
   // Loading placeholder for the initial load
