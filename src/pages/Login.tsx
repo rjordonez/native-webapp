@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -6,14 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import { UserRole } from "@/types/user";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<UserRole>("student");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const { login, user, profile, isLoading } = useAuth();
   const navigate = useNavigate();
@@ -94,19 +90,6 @@ const Login = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-            </div>
-            <div className="space-y-2">
-              <Label>I am a:</Label>
-              <RadioGroup value={role} onValueChange={(value) => setRole(value as UserRole)}>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="student" id="student" />
-                  <Label htmlFor="student" className="cursor-pointer">Student</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="teacher" id="teacher" />
-                  <Label htmlFor="teacher" className="cursor-pointer">Teacher</Label>
-                </div>
-              </RadioGroup>
             </div>
           </CardContent>
           <CardFooter className="flex flex-col">
