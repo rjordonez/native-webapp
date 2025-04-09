@@ -11,7 +11,7 @@ const Index = () => {
       <AppNavbar showActions={false} />
       <div className="flex-1 flex flex-col items-center justify-center p-8">
         <div className="max-w-3xl w-full text-center space-y-8">
-          <h1 className="text-4xl md:text-5xl font-bold">ClassConnect</h1>
+          <h1 className="text-4xl md:text-5xl font-bold">Native</h1>
           <p className="text-xl text-muted-foreground mx-auto max-w-xl">
             A simple platform for teachers to create virtual classrooms and for students to join them.
           </p>

@@ -21,7 +21,7 @@ const AppNavbar: React.FC<AppNavbarProps> = ({ showActions = true }) => {
     <header className="border-b">
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-2">
-          <Link to="/" className="text-xl font-bold">ClassConnect</Link>
+          <Link to="/" className="text-xl font-bold">Native</Link>
         </div>
         {showActions && user && profile && (
           <div className="flex items-center gap-4">

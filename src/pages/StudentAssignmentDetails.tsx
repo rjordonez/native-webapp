@@ -75,13 +75,24 @@ const StudentAssignmentDetails = () => {
               const audioUrl = await uploadAudio(assignment.id, currentQuestionIndex, audioBlob);
               
               if (audioUrl) {
+                // Update the current submission with the new audio URL
                 setCurrentSubmission(prev => {
                   if (!prev) return prev;
+                  
+                  // Create a deep copy of the answers array
                   const updatedAnswers = [...prev.answers];
+                  
+                  // Update the current question's audio URL
                   updatedAnswers[currentQuestionIndex] = {
                     ...updatedAnswers[currentQuestionIndex],
+                    questionId: currentQuestionIndex,  // Ensure questionId is set
                     audioUrl: audioUrl
                   };
+                  
+                  // Log the updated state for debugging
+                  console.log(`Updated answer for question ${currentQuestionIndex} with URL: ${audioUrl}`);
+                  console.log("Updated answers array:", updatedAnswers);
+                  
                   return {
                     ...prev,
                     status: "in_progress",
@@ -245,11 +256,24 @@ const StudentAssignmentDetails = () => {
           // Get all the audio URLs from the answers
           const audioUrls = updatedSubmission.answers
             .map(answer => answer.audioUrl)
-            .filter(url => url) as string[];
-            
-          // Send to analysis API
-          await sendToAnalysisAPI(audioUrls, updatedSubmission.submission_uid);
-          console.log("Analysis request sent successfully");
+            .filter(url => url && url.trim() !== "") as string[];
+          
+          console.log("Sending audio URLs to analysis API:", audioUrls);
+          
+          // Verify we have the correct number of URLs
+          if (audioUrls.length !== assignment.questions.length) {
+            console.warn(`Warning: Expected ${assignment.questions.length} URLs but got ${audioUrls.length}`);
+          }
+          
+          // Only proceed if we have URLs to send
+          if (audioUrls.length > 0) {
+            // Send to analysis API
+            await sendToAnalysisAPI(audioUrls, updatedSubmission.submission_uid);
+            console.log("Analysis request sent successfully");
+          } else {
+            console.error("No audio URLs found to send to analysis API");
+            toast.warning("Your submission was saved, but no audio recordings were found for analysis.");
+          }
         } catch (apiError) {
           // Log the error but don't fail the submission
           console.error("Error sending to analysis API:", apiError);
@@ -266,7 +290,6 @@ const StudentAssignmentDetails = () => {
       }
     }
   }, [currentSubmission, assignment, updateSubmission, navigate]);
-
   const getProgressPercentage = useCallback(() => {
     if (!currentSubmission || !assignment) return 0;
     const answeredCount = currentSubmission.answers.filter(a => a.audioUrl).length;
