@@ -278,38 +278,51 @@ const StudentSubmissionView = () => {
 
   // When user clicks "Report," fetch the .json file using the submission_uid
   useEffect(() => {
-    const fetchAnalysisResult = async () => {
+    const fetchAnalysisResult = async (retryCount = 0, maxRetries = 12) => {
       try {
         setLoading(true);
-        setAnalysisResult(null);
-        setError(null);
+        
+        console.log(`Attempt ${retryCount + 1}: Fetching analysis for submission_uid: ${submission.submission_uid}`);
 
-        console.log("Fetching analysis for submission_uid:", submission.submission_uid);
-
-        // IMPORTANT: Use submission.submission_uid for the file path
         const { data, error: downloadError } = await supabase.storage
           .from("analysis-results")
           .download(`${submission.submission_uid}.json`);
 
         if (downloadError) {
+          // If we haven't reached max retries yet, schedule another attempt
+          if (retryCount < maxRetries) {
+            console.log(`Retry scheduled in 10 seconds...`);
+            setTimeout(() => fetchAnalysisResult(retryCount + 1, maxRetries), 10000); // 10 seconds between attempts
+            return;
+          }
           throw new Error(downloadError.message);
         }
         
         const fileText = await data.text();
         const jsonData = JSON.parse(fileText);
         
-        console.log("Analysis data loaded:", jsonData);
+        console.log("Analysis data loaded successfully");
         setAnalysisResult(jsonData);
+        setLoading(false);
       } catch (e) {
         console.error("Error loading analysis:", e);
+        
+        // If we haven't reached max retries yet, schedule another attempt
+        if (retryCount < maxRetries) {
+          console.log(`Retry scheduled in 10 seconds...`);
+          setTimeout(() => fetchAnalysisResult(retryCount + 1, maxRetries), 10000); // 10 seconds between attempts
+          return;
+        }
+        
         setError(e.message || "Could not load the analysis report.");
-      } finally {
         setLoading(false);
       }
     };
 
     if (showReport) {
       fetchAnalysisResult();
+    } else {
+      setLoading(false);
     }
   }, [showReport, submission.submission_uid]);
   
@@ -358,12 +371,15 @@ const StudentSubmissionView = () => {
   const renderReportView = () => {
     if (loading) {
       return (
-        <div className="space-y-4 p-6 bg-white shadow rounded-lg">
-          <Skeleton className="h-8 w-1/2" />
-          <Skeleton className="h-6 w-full" />
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-6 w-2/3" />
-          <Skeleton className="h-48 w-full" />
+        <div className="space-y-4 p-6 bg-white shadow rounded-lg text-center">
+          <h2 className="text-xl font-bold mb-4">Loading Pronunciation Report</h2>
+          <p className="text-gray-600 mb-6">
+            Please wait while we generate your pronunciation analysis. 
+            This may take up to 2 minutes to complete.
+          </p>
+          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-6">
+            <div className="bg-blue-600 h-2.5 rounded-full animate-pulse"></div>
+          </div>
         </div>
       );
     }
@@ -372,12 +388,21 @@ const StudentSubmissionView = () => {
       return (
         <div className="p-6 bg-white shadow rounded-lg">
           <h2 className="text-xl font-bold mb-4">Error Loading Report</h2>
-          <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200">
-            {error}
-          </div>
           <p className="mt-4 text-gray-600">
-            The analysis data might not be available yet. Please check back later or contact support if this issue persists.
+            We couldn't load your pronunciation report after multiple attempts.
+            Please try again later or contact support if this issue persists.
           </p>
+          <Button 
+            className="mt-4" 
+            onClick={() => {
+              setLoading(true);
+              setError(null);
+              setShowReport(false);
+              setTimeout(() => setShowReport(true), 100);
+            }}
+          >
+            Try Again
+          </Button>
         </div>
       );
     }
@@ -387,8 +412,7 @@ const StudentSubmissionView = () => {
         <div className="p-6 bg-white shadow rounded-lg">
           <h2 className="text-xl font-bold mb-4">No Analysis Available</h2>
           <p className="text-gray-600">
-            The pronunciation analysis for this submission is not available yet. 
-            Analysis is typically completed within a few minutes after submission.
+            The pronunciation analysis for this submission is not available yet.
           </p>
         </div>
       );
