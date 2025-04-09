@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calendar, Clock, Mic, MicOff, ArrowRight, Check } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, Mic, ArrowRight, Check, Square } from "lucide-react";
 import AppNavbar from "@/components/AppNavbar";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -400,7 +400,7 @@ const StudentAssignmentDetails = () => {
                       disabled={isUploading}
                     >
                       {isRecording ? (
-                        <MicOff className="h-8 w-8" />
+                        <Square className="h-8 w-8" />
                       ) : (
                         <Mic className="h-8 w-8" />
                       )}
