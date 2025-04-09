@@ -8,6 +8,19 @@ import { PlusCircle, Users, BookOpen, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
 
+import { Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+
 const TeacherDashboard = () => {
   const navigate = useNavigate();
   const { classId } = useParams();
@@ -18,6 +31,7 @@ const TeacherDashboard = () => {
     getStudentsByClass,
     getAssignmentSubmissions,
     getClassById,
+    deleteAssignment,
     loading 
   } = useClass();
   
@@ -25,6 +39,8 @@ const TeacherDashboard = () => {
   const [selectedClass, setSelectedClass] = useState(null);
   const [classDetails, setClassDetails] = useState(null);
   const [submissions, setSubmissions] = useState([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [assignmentToDelete, setAssignmentToDelete] = useState(null);
   const [submissionTotals, setSubmissionTotals] = useState({}); // New state for totals
 
   // Load selected class from URL on mount or refresh
@@ -100,6 +116,45 @@ const TeacherDashboard = () => {
     }
   }, [selectedClass, getAssignmentsByClass, getStudentsByClass, getAssignmentSubmissions, getAssignmentStats]);
 
+
+
+
+  const handleDeleteAssignment = async () => {
+    if (!assignmentToDelete) return;
+    
+    const success = await deleteAssignment(assignmentToDelete);
+    if (success) {
+      setDeleteDialogOpen(false);
+      setAssignmentToDelete(null);
+      
+      // Refresh class details after deletion
+      if (selectedClass) {
+        // Create a new array without the deleted assignment
+        const updatedAssignments = classDetails.assignments.filter(
+          assignment => assignment.id !== assignmentToDelete
+        );
+        
+        // Get fresh stats for the remaining assignments
+        const statsPromises = updatedAssignments.map(async (assignment) => {
+          return await getAssignmentStats(assignment.id);
+        });
+        const assignmentStats = await Promise.all(statsPromises);
+        
+        // Update the state with the filtered assignments and new stats
+        setClassDetails(prev => ({
+          ...prev,
+          assignments: updatedAssignments,
+          stats: assignmentStats
+        }));
+        
+        // Also update submissions by filtering out any for the deleted assignment
+        setSubmissions(prev => prev.filter(
+          submission => submission.assignmentId !== assignmentToDelete
+        ));
+      }
+    }
+  };
+
   if (selectedClass) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
@@ -133,11 +188,25 @@ const TeacherDashboard = () => {
               const stats = classDetails.stats[index]; // Use pre-fetched stats
               return (
                 <Card key={assignment.id}>
-                  <CardHeader>
-                    <CardTitle>{assignment.title}</CardTitle>
-                    <CardDescription>
-                      Topic: {assignment.topic} - Due: {new Date(assignment.dueDate).toLocaleDateString()}
-                    </CardDescription>
+                  <CardHeader className="flex flex-row items-start justify-between">
+                    <div>
+                      <CardTitle>{assignment.title}</CardTitle>
+                      <CardDescription>
+                        Topic: {assignment.topic} - Due: {new Date(assignment.dueDate).toLocaleDateString()}
+                      </CardDescription>
+                    </div>
+                    <Button 
+                      variant="outline"
+                      size="sm"
+                      className="text-red-500 hover:text-red-700"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAssignmentToDelete(assignment.id);
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
+                      <Trash2 size={16} />
+                    </Button>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-3 gap-4 mb-6">
@@ -222,6 +291,27 @@ const TeacherDashboard = () => {
             })}
           </div>
         </main>
+
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Assignment</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this assignment? This action cannot be undone.
+                All student submissions for this assignment will also be deleted.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setAssignmentToDelete(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleDeleteAssignment}
+                className="bg-red-500 hover:text-white hover:bg-red-700"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     );
   }
@@ -296,6 +386,27 @@ const TeacherDashboard = () => {
           </div>
         )}
       </main>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Assignment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this assignment? This action cannot be undone.
+              All student submissions for this assignment will also be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setAssignmentToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteAssignment}
+              className="bg-red-500 hover:text-white hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

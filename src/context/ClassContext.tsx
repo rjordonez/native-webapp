@@ -55,6 +55,7 @@ interface ClassContextType {
     assignmentId: string
   ) => Promise<Submission[]>;
   getClassById: (classId: string) => Promise<Class | null>;
+  deleteAssignment: (assignmentId: string) => Promise<boolean>;
 }
 
 const ClassContext = createContext<ClassContextType>({
@@ -84,6 +85,8 @@ const ClassContext = createContext<ClassContextType>({
   getStudentsByClass: async () => [],
   getAssignmentSubmissions: async () => [],
   getClassById: async () => null,
+  deleteAssignment: async () => false,
+  
 });
 
 export const useClass = () => useContext(ClassContext);
@@ -884,6 +887,60 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+
+  // -----------------------------------------------------
+  // deleteAssignment
+  // -----------------------------------------------------
+  const deleteAssignment = async (assignmentId: string): Promise<boolean> => {
+    if (!user || profile?.role !== "teacher") {
+      toast.error("Only teachers can delete assignments");
+      return false;
+    }
+
+    try {
+      // First, check if there are any submissions to warn the user if needed
+      const { data: subsCount, error: subsError } = await supabase
+        .from("submissions")
+        .select("id", { count: "exact", head: true })
+        .eq("assignment_id", parseInt(assignmentId, 10));
+        
+      if (subsError) throw subsError;
+      
+      // Delete all related submissions first (foreign key constraint)
+      const { error: delSubsError } = await supabase
+        .from("submissions")
+        .delete()
+        .eq("assignment_id", parseInt(assignmentId, 10));
+        
+      if (delSubsError) throw delSubsError;
+      
+      // Delete the assignment itself
+      const { error: delAssignError } = await supabase
+        .from("assignments")
+        .delete()
+        .eq("id", parseInt(assignmentId, 10));
+        
+      if (delAssignError) throw delAssignError;
+      
+      // Update local state
+      setAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
+      
+      // Remove related submissions from state too
+      setSubmissions((prev) => 
+        prev.filter((s) => s.assignmentId !== assignmentId)
+      );
+      
+      toast.success("Assignment deleted successfully");
+      return true;
+    } catch (error: any) {
+      console.error("Error deleting assignment:", error);
+      toast.error("Failed to delete assignment", {
+        description: error.message,
+      });
+      return false;
+    }
+  };
+
   // -----------------------------------------------------
   // Final Return
   // -----------------------------------------------------
@@ -913,6 +970,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
         getStudentsByClass,
         getAssignmentSubmissions,
         getClassById,
+        deleteAssignment,
       }}
     >
       {children}
