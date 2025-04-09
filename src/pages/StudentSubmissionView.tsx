@@ -12,6 +12,9 @@ import { supabase } from "@/integrations/supabase/client";
 
 // Voice Tutor Report Component
 const VoiceTutorReport = ({ data }) => {
+  const [activeAnalysisIndex, setActiveAnalysisIndex] = useState(0);
+  const [audioRef, setAudioRef] = useState(null);
+  
   // Helper function to format date
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -20,7 +23,7 @@ const VoiceTutorReport = ({ data }) => {
 
   // Helper function to determine color based on score
   const getScoreColor = (score) => {
-    if (score >= 80) return 'text-green-600';
+    if (score >= 80) return 'text-green-600'; // Changed from green to gray
     if (score >= 60) return 'text-yellow-600';
     return 'text-red-600';
   };
@@ -33,11 +36,9 @@ const VoiceTutorReport = ({ data }) => {
   };
 
   const report = data;
-  const analysis = report.pronunciation_analysis && report.pronunciation_analysis.length > 0 
-    ? report.pronunciation_analysis[0] 
-    : null;
-    
-  if (!analysis) {
+  
+  // Check if we have any analysis data
+  if (!report.pronunciation_analysis || report.pronunciation_analysis.length === 0) {
     return (
       <div className="bg-white shadow rounded-lg p-6 max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-gray-800">Voice Pronunciation Report</h1>
@@ -46,7 +47,10 @@ const VoiceTutorReport = ({ data }) => {
     );
   }
   
-  // Calculate actual scores - in your real data these might already be populated
+  // Get the currently active analysis
+  const analysis = report.pronunciation_analysis[activeAnalysisIndex];
+  
+  // Calculate actual scores
   const calculateOverallScore = () => {
     if (!analysis.word_details || analysis.word_details.length === 0) return 0;
     const sum = analysis.word_details.reduce((acc, word) => acc + word.accuracy_score, 0);
@@ -54,6 +58,24 @@ const VoiceTutorReport = ({ data }) => {
   };
   
   const overallScore = analysis.overall_pronunciation_score || calculateOverallScore();
+
+  // Function to play word at timestamp and stop after duration
+  const playWordAtTimestamp = (offset, duration) => {
+    if (audioRef) {
+      audioRef.currentTime = offset;
+      audioRef.play();
+      
+      // Set timeout to pause after the word duration
+      setTimeout(() => {
+        audioRef.pause();
+      }, duration * 1000); // Convert duration to milliseconds
+    }
+  };
+
+  // Filter to only show problematic words (accuracy < 80)
+  const problemWords = analysis.word_details ? 
+    analysis.word_details.filter(word => word.accuracy_score < 80) : 
+    [];
 
   return (
     <div className="bg-white shadow rounded-lg p-6 max-w-4xl mx-auto">
@@ -72,15 +94,38 @@ const VoiceTutorReport = ({ data }) => {
         </div>
       </div>
 
+      {/* Question Selector */}
+      {report.pronunciation_analysis.length > 1 && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold mb-2">Select Question</h2>
+          <div className="flex gap-2">
+            {report.pronunciation_analysis.map((_, index) => (
+              <button
+                key={index}
+                className={`px-4 py-2 rounded ${
+                  activeAnalysisIndex === index
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-200 text-gray-800"
+                }`}
+                onClick={() => setActiveAnalysisIndex(index)}
+              >
+                Question {index + 1}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Audio Player */}
       {analysis.url && (
         <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-2">Recording</h2>
+          <h2 className="text-lg font-semibold mb-2">Recording for Question {activeAnalysisIndex + 1}</h2>
           <div className="flex items-center">
             <audio 
               controls 
               src={analysis.url} 
               className="w-full"
+              ref={ref => setAudioRef(ref)}
             >
               Your browser does not support the audio element.
             </audio>
@@ -106,7 +151,7 @@ const VoiceTutorReport = ({ data }) => {
           <div className="ml-4">
             <div className="w-48 bg-gray-200 rounded-full h-4">
               <div 
-                className={`h-4 rounded-full ${overallScore >= 80 ? 'bg-green-500' : overallScore >= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                className={`h-4 rounded-full ${overallScore >= 80 ? 'bg-green-600' : overallScore >= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
                 style={{ width: `${overallScore}%` }}
               ></div>
             </div>
@@ -117,10 +162,10 @@ const VoiceTutorReport = ({ data }) => {
         </div>
       </div>
 
-      {/* Word Details */}
-      {analysis.word_details && analysis.word_details.length > 0 && (
+      {/* Problem Words (Only Yellow and Red) */}
+      {problemWords.length > 0 && (
         <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-2">Word Analysis</h2>
+          <h2 className="text-lg font-semibold mb-2">Problem Words</h2>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -133,8 +178,8 @@ const VoiceTutorReport = ({ data }) => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {analysis.word_details.map((word, index) => (
-                  <tr key={index} className={word.error_type !== "None" ? "bg-red-50" : ""}>
+                {problemWords.map((word, index) => (
+                  <tr key={index} className={word.accuracy_score < 60 ? "bg-red-50" : "bg-yellow-50"}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{word.word}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{word.offset.toFixed(2)}s</td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -144,7 +189,7 @@ const VoiceTutorReport = ({ data }) => {
                         </span>
                         <div className="ml-2 w-16 bg-gray-200 rounded-full h-2">
                           <div 
-                            className={`h-2 rounded-full ${word.accuracy_score >= 80 ? 'bg-green-500' : word.accuracy_score >= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                            className={`h-2 rounded-full ${word.accuracy_score >= 80 ? 'bg-gray-500' : word.accuracy_score >= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
                             style={{ width: `${word.accuracy_score}%` }}
                           ></div>
                         </div>
@@ -156,21 +201,15 @@ const VoiceTutorReport = ({ data }) => {
                           {word.error_type}
                         </span>
                       ) : (
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                          Correct
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                          Needs Improvement
                         </span>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <button 
                         className="p-1 rounded-full hover:bg-gray-100"
-                        onClick={() => {
-                          const audio = document.querySelector('audio');
-                          if (audio) {
-                            audio.currentTime = word.offset;
-                            audio.play();
-                          }
-                        }}
+                        onClick={() => playWordAtTimestamp(word.offset, word.duration)}
                       >
                         <Play size={16} />
                       </button>
@@ -183,22 +222,7 @@ const VoiceTutorReport = ({ data }) => {
         </div>
       )}
 
-      {/* Critical Errors */}
-      {analysis.critical_errors && analysis.critical_errors.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-2">Critical Errors</h2>
-          <div className="bg-red-50 p-4 rounded border border-red-200">
-            <ul className="list-disc pl-5 space-y-2">
-              {analysis.critical_errors.map((error, index) => (
-                <li key={index} className="text-red-700">
-                  <span className="font-medium">{error.word}</span> - Score: {error.score} (at {error.timestamp.toFixed(2)}s)
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-
+    
       {/* Improvement Suggestions */}
       {analysis.improvement_suggestion && (
         <div className="mb-6">
@@ -213,14 +237,14 @@ const VoiceTutorReport = ({ data }) => {
 };
 
 const StudentSubmissionView = () => {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams();
   const navigate = useNavigate();
   const { assignments, submissions } = useClass();
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
   const [showReport, setShowReport] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [analysisResult, setAnalysisResult] = useState(null);
 
   // Find the submission row by React Router param
   const submission = submissions.find((s) => s.id === id);
@@ -260,6 +284,8 @@ const StudentSubmissionView = () => {
         setAnalysisResult(null);
         setError(null);
 
+        console.log("Fetching analysis for submission_uid:", submission.submission_uid);
+
         // IMPORTANT: Use submission.submission_uid for the file path
         const { data, error: downloadError } = await supabase.storage
           .from("analysis-results")
@@ -268,10 +294,14 @@ const StudentSubmissionView = () => {
         if (downloadError) {
           throw new Error(downloadError.message);
         }
+        
         const fileText = await data.text();
         const jsonData = JSON.parse(fileText);
+        
+        console.log("Analysis data loaded:", jsonData);
         setAnalysisResult(jsonData);
-      } catch (e: any) {
+      } catch (e) {
+        console.error("Error loading analysis:", e);
         setError(e.message || "Could not load the analysis report.");
       } finally {
         setLoading(false);
@@ -282,8 +312,6 @@ const StudentSubmissionView = () => {
       fetchAnalysisResult();
     }
   }, [showReport, submission.submission_uid]);
-  
-  console.log("Submission object:", submission);
   
   // Render the standard audio responses
   const renderSubmissionView = () => (
@@ -330,23 +358,43 @@ const StudentSubmissionView = () => {
   const renderReportView = () => {
     if (loading) {
       return (
-        <div className="space-y-4">
-          <Skeleton className="h-6 w-1/2" />
+        <div className="space-y-4 p-6 bg-white shadow rounded-lg">
+          <Skeleton className="h-8 w-1/2" />
           <Skeleton className="h-6 w-full" />
+          <Skeleton className="h-32 w-full" />
           <Skeleton className="h-6 w-2/3" />
+          <Skeleton className="h-48 w-full" />
         </div>
       );
     }
 
     if (error) {
-      return <div className="text-red-500">Error: {error}</div>;
+      return (
+        <div className="p-6 bg-white shadow rounded-lg">
+          <h2 className="text-xl font-bold mb-4">Error Loading Report</h2>
+          <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200">
+            {error}
+          </div>
+          <p className="mt-4 text-gray-600">
+            The analysis data might not be available yet. Please check back later or contact support if this issue persists.
+          </p>
+        </div>
+      );
     }
 
     if (!analysisResult) {
-      return <div>No analysis result found.</div>;
+      return (
+        <div className="p-6 bg-white shadow rounded-lg">
+          <h2 className="text-xl font-bold mb-4">No Analysis Available</h2>
+          <p className="text-gray-600">
+            The pronunciation analysis for this submission is not available yet. 
+            Analysis is typically completed within a few minutes after submission.
+          </p>
+        </div>
+      );
     }
 
-    // Use our VoiceTutorReport component
+    // Pass the data to our VoiceTutorReport component
     return <VoiceTutorReport data={analysisResult} />;
   };
 
@@ -414,7 +462,7 @@ const StudentSubmissionView = () => {
             View Submission
           </Button>
           <Button variant={showReport ? "default" : "outline"} onClick={() => setShowReport(true)}>
-            Report
+            Pronunciation Report
           </Button>
         </div>
 
