@@ -72,7 +72,14 @@ const StudentDashboard = () => {
       <main className="flex-1 container py-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Student Dashboard</h1>
-          <Button onClick={() => navigate("/join-class")}>Join New Class</Button>
+          <div className="flex gap-4">
+            <Button>
+              <a href="https://speakingpractice.vercel.app" target="_blank" rel="noopener noreferrer">
+                IELTS Test
+              </a>
+            </Button>
+            <Button onClick={() => navigate("/join-class")}>Join New Class</Button>
+          </div>
         </div>
         
         {classes.length === 0 ? (
