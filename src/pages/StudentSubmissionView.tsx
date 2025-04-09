@@ -278,6 +278,8 @@ const StudentSubmissionView = () => {
 
   // When user clicks "Report," fetch the .json file using the submission_uid
   useEffect(() => {
+    let timeoutId = null;
+    
     const fetchAnalysisResult = async (retryCount = 0, maxRetries = 12) => {
       try {
         setLoading(true);
@@ -292,7 +294,7 @@ const StudentSubmissionView = () => {
           // If we haven't reached max retries yet, schedule another attempt
           if (retryCount < maxRetries) {
             console.log(`Retry scheduled in 10 seconds...`);
-            setTimeout(() => fetchAnalysisResult(retryCount + 1, maxRetries), 10000); // 10 seconds between attempts
+            timeoutId = setTimeout(() => fetchAnalysisResult(retryCount + 1, maxRetries), 10000); // 10 seconds between attempts
             return;
           }
           throw new Error(downloadError.message);
@@ -310,7 +312,7 @@ const StudentSubmissionView = () => {
         // If we haven't reached max retries yet, schedule another attempt
         if (retryCount < maxRetries) {
           console.log(`Retry scheduled in 10 seconds...`);
-          setTimeout(() => fetchAnalysisResult(retryCount + 1, maxRetries), 10000); // 10 seconds between attempts
+          timeoutId = setTimeout(() => fetchAnalysisResult(retryCount + 1, maxRetries), 10000); // 10 seconds between attempts
           return;
         }
         
@@ -324,6 +326,14 @@ const StudentSubmissionView = () => {
     } else {
       setLoading(false);
     }
+    
+    // Cleanup function to cancel any pending timeouts
+    return () => {
+      if (timeoutId) {
+        console.log("Cleaning up - clearing scheduled fetch timeout");
+        clearTimeout(timeoutId);
+      }
+    };
   }, [showReport, submission.submission_uid]);
   
   // Render the standard audio responses
