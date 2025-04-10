@@ -100,7 +100,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [submissionsLoading, setSubmissionsLoading] = useState<boolean>(false);
   const { user, profile } = useAuth();
-
+  const [studentsLoading, setStudentsLoading] = useState({});
   // -----------------------------------------------------
   // Load Submissions (Student)
   // -----------------------------------------------------
@@ -538,31 +538,47 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
   // getStudentsByClass
   // -----------------------------------------------------
   const getStudentsByClass = useCallback(async (classId: string) => {
+    // Set loading state for this specific class
+    setStudentsLoading(prev => ({ ...prev, [classId]: true }));
+    
     try {
-      const { data: enrollments, error } = await supabase
+      // Get both requests started in parallel instead of sequentially
+      const enrollmentsPromise = supabase
         .from("students_classes")
         .select("student_id")
         .eq("class_id", classId);
+        
+      // Wait for the first query to complete
+      const { data: enrollments, error } = await enrollmentsPromise;
       if (error) throw error;
-      if (!enrollments || enrollments.length === 0) return [];
-
+      if (!enrollments || enrollments.length === 0) {
+        setStudentsLoading(prev => ({ ...prev, [classId]: false }));
+        return [];
+      }
+  
+      // Make the second query
       const studentIds = enrollments.map((e) => e.student_id);
       const { data: usersData, error: usersError } = await supabase
         .from("users")
         .select("id, name")
         .in("id", studentIds);
+      
       if (usersError) throw usersError;
-
-      return (
-        usersData?.map((user) => ({
-          id: user.id,
-          name: user.name || "Unknown",
-        })) || []
-      );
+  
+      // Only return when we have complete data
+      const result = usersData?.map((user) => ({
+        id: user.id,
+        name: user.name || "Unknown",
+      })) || [];
+      
+      return result;
     } catch (error) {
       console.error("Error loading students:", error);
       toast.error("Failed to load students");
       return [];
+    } finally {
+      // Always clear loading state
+      setStudentsLoading(prev => ({ ...prev, [classId]: false }));
     }
   }, []);
 

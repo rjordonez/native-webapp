@@ -42,6 +42,7 @@ const TeacherDashboard = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [assignmentToDelete, setAssignmentToDelete] = useState(null);
   const [submissionTotals, setSubmissionTotals] = useState({}); // New state for totals
+  const [studentsLoading, setStudentsLoading] = useState(false);
 
   // Load selected class from URL on mount or refresh
   useEffect(() => {
@@ -84,40 +85,44 @@ const TeacherDashboard = () => {
   useEffect(() => {
     if (selectedClass) {
       const loadDetails = async () => {
-        const assignments = getAssignmentsByClass(selectedClass.id);
-        const students = await getStudentsByClass(selectedClass.id);
-        
-        // Get stats for all assignments
-        const statsPromises = assignments.map(async (assignment) => {
-          return await getAssignmentStats(assignment.id); // Await stats
-        });
-        const assignmentStats = await Promise.all(statsPromises);
-
-        // Get submissions for all assignments
-        const allSubmissions = await Promise.all(
-          assignments.map(async (assignment) => {
-            const subs = await getAssignmentSubmissions(assignment.id);
-            return subs.map(s => ({
-              ...s,
-              assignmentTitle: assignment.title
-            }));
-          })
-        );
-        
-        setSubmissions(allSubmissions.flat());
-        setClassDetails({
-          students,
-          assignments,
-          stats: assignmentStats // Use resolved stats
-        });
+        setStudentsLoading(true);
+        try {
+          const assignments = getAssignmentsByClass(selectedClass.id);
+          const students = await getStudentsByClass(selectedClass.id);
+          
+          // Get stats for all assignments
+          const statsPromises = assignments.map(async (assignment) => {
+            return await getAssignmentStats(assignment.id); // Await stats
+          });
+          const assignmentStats = await Promise.all(statsPromises);
+  
+          // Get submissions for all assignments
+          const allSubmissions = await Promise.all(
+            assignments.map(async (assignment) => {
+              const subs = await getAssignmentSubmissions(assignment.id);
+              return subs.map(s => ({
+                ...s,
+                assignmentTitle: assignment.title
+              }));
+            })
+          );
+          
+          setSubmissions(allSubmissions.flat());
+          setClassDetails({
+            students,
+            assignments,
+            stats: assignmentStats
+          });
+        } catch (error) {
+          console.error("Error loading class details:", error);
+        } finally {
+          setStudentsLoading(false);
+        }
       };
-      
+        
       loadDetails();
     }
-  }, [selectedClass, getAssignmentsByClass, getStudentsByClass, getAssignmentSubmissions, getAssignmentStats]);
-
-
-
+  }, [selectedClass]); 
 
   const handleDeleteAssignment = async () => {
     if (!assignmentToDelete) return;
