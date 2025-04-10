@@ -259,9 +259,13 @@ const TeacherDashboard = () => {
                                       submission?.status === 'submitted' ? 'default' : 
                                       submission?.status === 'in_progress' ? 'secondary' : 'outline'
                                     }
+                                    className={
+                                      submission?.status === 'submitted' ? 'bg-green-500 hover:bg-green-600' : 
+                                      submission?.status === 'in_progress' ? 'bg-yellow-500 hover:bg-yellow-600' : ''
+                                    }
                                   >
                                     {submission?.status === 'submitted' ? 'Submitted' :
-                                     submission?.status === 'in_progress' ? 'In Progress' : 'Not Started'}
+                                    submission?.status === 'in_progress' ? 'In Progress' : 'Not Started'}
                                   </Badge>
                                 </TableCell>
                                 <TableCell>

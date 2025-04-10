@@ -24,7 +24,7 @@ const TOPICS = [
   "Technology",
   "Environment",
   "Health",
-  "Custom" // Added custom option
+  "Custom" 
 ];
 
 // Predefined question templates for each topic
