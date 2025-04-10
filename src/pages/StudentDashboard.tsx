@@ -47,7 +47,7 @@ const StudentDashboard = () => {
       case "not_started":
         return <Badge variant="outline" className="ml-2">Not Started</Badge>;
       case "in_progress":
-        return <Badge variant="secondary" className="ml-2">In Progress</Badge>;
+        return <Badge variant="secondary" className="ml-2 bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-300">In Progress</Badge>;
       case "submitted":
         return <Badge variant="default" className="bg-green-500 hover:bg-green-600 ml-2">Submitted</Badge>;
       default:
@@ -151,7 +151,7 @@ const StudentDashboard = () => {
                         </CardContent>
                         <CardFooter>
                           <Button 
-                            className="w-full" 
+                            className={`w-full ${status === "in_progress" ? "bg-amber-500 hover:bg-amber-600" : ""}`} 
                             onClick={() => navigate(`/student/assignment/${assignment.id}`)}
                           >
                             {status === "in_progress" ? "Continue Assignment" : "Start Assignment"}
@@ -206,8 +206,7 @@ const StudentDashboard = () => {
                         </CardContent>
                         <CardFooter>
                           <Button 
-                            variant={submission?.feedback?.reviewed ? "default" : "outline"} 
-                            className="w-full"
+                            className={`w-full ${!submission?.feedback?.reviewed ? "bg-green-500 hover:bg-green-600 text-white" : ""}`}
                             onClick={() => navigate(`/student/submission/${submission?.id}`)}
                           >
                             {submission?.feedback?.reviewed ? "View Feedback" : "View Submission"}

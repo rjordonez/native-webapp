@@ -1,4 +1,3 @@
-
 import { useParams, useNavigate } from "react-router-dom";
 import { useClass } from "@/context/ClassContext";
 import { useAuth } from "@/context/AuthContext";
@@ -62,7 +61,7 @@ const StudentClassView = () => {
       case "not_started":
         return <Badge variant="outline" className="ml-2">Not Started</Badge>;
       case "in_progress":
-        return <Badge variant="secondary" className="ml-2">In Progress</Badge>;
+        return <Badge variant="secondary" className="ml-2 bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-300">In Progress</Badge>;
       case "submitted":
         return <Badge variant="default" className="bg-green-500 ml-2">Submitted</Badge>;
       default:
@@ -121,8 +120,7 @@ const StudentClassView = () => {
                       <CardFooter>
                         {status === "submitted" ? (
                           <Button 
-                            variant="outline" 
-                            className="w-full"
+                            className="w-full bg-green-500 hover:bg-green-600 text-white"
                             onClick={() => {
                               const submission = studentSubmissions.find(s => s.assignmentId === assignment.id);
                               if (submission) {
@@ -134,7 +132,7 @@ const StudentClassView = () => {
                           </Button>
                         ) : (
                           <Button 
-                            className="w-full" 
+                            className={`w-full ${status === "in_progress" ? "bg-amber-500 hover:bg-amber-600" : ""}`}
                             onClick={() => navigate(`/student/assignment/${assignment.id}`)}
                           >
                             {status === "in_progress" ? "Continue Assignment" : "Start Assignment"}

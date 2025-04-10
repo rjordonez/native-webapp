@@ -93,11 +93,19 @@ const StudentAssignmentDetails = () => {
                   console.log(`Updated answer for question ${currentQuestionIndex} with URL: ${audioUrl}`);
                   console.log("Updated answers array:", updatedAnswers);
                   
-                  return {
+                  // Create updated submission object with correct type
+                  const updatedSubmission = {
                     ...prev,
-                    status: "in_progress",
+                    status: "in_progress" as const, // Use const assertion to fix the type
                     answers: updatedAnswers
                   };
+                  
+                  // Persist this change to the context/backend
+                  updateSubmission(updatedSubmission)
+                    .then(() => console.log("Submission status updated to in_progress"))
+                    .catch(err => console.error("Failed to update submission status:", err));
+                  
+                  return updatedSubmission;
                 });
                 toast.success("Recording saved successfully!");
               }
@@ -132,7 +140,7 @@ const StudentAssignmentDetails = () => {
         mediaRecorderRef.current.stream?.getTracks().forEach(track => track.stop());
       }
     };
-  }, [assignment, user, currentQuestionIndex, uploadAudio]);
+  }, [assignment, user, currentQuestionIndex, uploadAudio, updateSubmission]);
 
   // Initialize submission
   useEffect(() => {
@@ -148,7 +156,7 @@ const StudentAssignmentDetails = () => {
         submission_uid: `unique_${Math.random().toString(36).substring(2, 9)}`,
         assignmentId: assignment.id,
         studentId: user.id,
-        status: "not_started",
+        status: "not_started" as const,
         answers: assignment.questions.map((_, index) => ({ questionId: index })),
       };
     }
@@ -180,7 +188,7 @@ const StudentAssignmentDetails = () => {
     }
   }, []);
 
-  // Modified toggleRecording to clear previous recordings
+  // Modified toggleRecording to clear previous recordings and persist "in_progress" status
   const toggleRecording = useCallback(() => {
     if (!mediaRecorderRef.current) {
       toast.error('Microphone not ready. Please refresh the page.');
@@ -200,10 +208,24 @@ const StudentAssignmentDetails = () => {
             ...updatedAnswers[currentQuestionIndex],
             audioUrl: ""  // Clear the audio URL
           };
-          return {
+          
+          // Create updated submission object with correct type
+          const updatedSubmission = {
             ...prev,
+            status: "in_progress" as const, // Use const assertion to fix the type
             answers: updatedAnswers
           };
+          
+          // Persist this change to the context/backend if we already have some answers
+          // Check if we have at least one answer with an audio URL
+          const hasAnyRecordings = updatedAnswers.some(a => a.audioUrl && a.audioUrl.trim() !== "");
+          if (hasAnyRecordings) {
+            updateSubmission(updatedSubmission)
+              .then(() => console.log("Submission status updated after clearing audio"))
+              .catch(err => console.error("Failed to update submission:", err));
+          }
+          
+          return updatedSubmission;
         });
       }
       
@@ -212,7 +234,7 @@ const StudentAssignmentDetails = () => {
       setTimeLeft(40);
       mediaRecorderRef.current.start(100);
     }
-  }, [isRecording, stopRecording, audioUrls, currentQuestionIndex]);
+  }, [isRecording, stopRecording, audioUrls, currentQuestionIndex, updateSubmission]);
 
   const goToNextQuestion = useCallback(() => {
     if (assignment && currentQuestionIndex < assignment.questions.length - 1) {
@@ -290,6 +312,7 @@ const StudentAssignmentDetails = () => {
       }
     }
   }, [currentSubmission, assignment, updateSubmission, navigate]);
+  
   const getProgressPercentage = useCallback(() => {
     if (!currentSubmission || !assignment) return 0;
     const answeredCount = currentSubmission.answers.filter(a => a.audioUrl).length;
