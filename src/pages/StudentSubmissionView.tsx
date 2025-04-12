@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import React, { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
 
 // Voice Tutor Report Component
 // Voice Tutor Report Component
@@ -70,6 +71,40 @@ interface PronunciationAnalysis {
   url: string;
 }
 
+// fluency and coherence
+interface FluencyMetrics {
+  speech_rate: number;
+  hesitation_ratio: number;
+  pause_pattern_score: number;
+  overall_fluency_score: number;
+}
+
+interface CoherenceMetrics {
+  topic_consistency: number;
+  logical_flow: number;
+  idea_development: number;
+  overall_coherence_score: number;
+}
+
+interface FluencyCoherenceAnalysis {
+  fluency_metrics: FluencyMetrics;
+  coherence_metrics: CoherenceMetrics;
+  key_findings: string[];
+  improvement_suggestions: string[];
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    payload: {
+      metric: string;
+      value: number;
+      category: string;
+    };
+  }>;
+  label?: string;
+}
+
 interface AnalysisReport {
   submission_id: string;
   timestamp: string;
@@ -78,12 +113,31 @@ interface AnalysisReport {
   pronunciation_analysis: PronunciationAnalysis[];
   grammar_analysis: Record<string, SentenceCorrection>;
   vocabulary_suggestions: Record<string, SentenceVocab>;
+  fluency_coherence_analysis?: Record<string, FluencyCoherenceAnalysis>;
 }
+
+
+// Custom tooltip for RadarChart
+const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white p-2 shadow-md rounded border border-gray-200">
+        <p className="font-semibold">{data.metric}</p>
+        <p>Score: <span className="font-medium">{data.value}</span>/100</p>
+        <p className="text-xs text-gray-500">{data.category}</p>
+      </div>
+    );
+  }
+  return null;
+};
+
 
 const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
   const [activeAnalysisIndex, setActiveAnalysisIndex] = useState(0);
   const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
   const [activeTab, setActiveTab] = useState("pronunciation"); // Added tab state
+  
 
   // Helper function to format date
   const formatDate = (dateString: string) => {
@@ -152,6 +206,11 @@ const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
   
   // Get vocabulary suggestions
   const vocabSuggestions = report.vocabulary_suggestions || {};
+
+  //Get Fluency
+  const fluencyCoherenceAnalysis = report.fluency_coherence_analysis || {};
+  const fluencyRecordingKey = `recording_${activeAnalysisIndex + 1}`;
+  const fluencyData = fluencyCoherenceAnalysis[fluencyRecordingKey];
 
   return (
     <div className="bg-white shadow rounded-lg p-6 max-w-4xl mx-auto">
@@ -251,6 +310,18 @@ const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
             >
               Vocabulary
             </button>
+
+            <button
+              onClick={() => setActiveTab("fluency")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "fluency"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Fluency & Coherence
+            </button>
+
           </nav>
         </div>
       </div>
@@ -466,6 +537,130 @@ const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
           )}
         </div>
       )}
+
+      {/* Fluency & Coherence Tab */}
+      {activeTab === "fluency" && (
+        <div>
+          <h2 className="text-lg font-semibold mb-2">Fluency & Coherence Analysis</h2>
+          {fluencyData ? (
+            <div>
+              {/* Overall scores */}
+              <div className="grid grid-cols-3 gap-4 mb-6 mt-4">
+                <div className="text-center p-4 bg-gray-50 rounded">
+                  <div className={`text-3xl font-bold ${getScoreColor((fluencyData.fluency_metrics.overall_fluency_score + fluencyData.coherence_metrics.overall_coherence_score) / 2)}`}>
+                    {Math.round((fluencyData.fluency_metrics.overall_fluency_score + fluencyData.coherence_metrics.overall_coherence_score) / 2)}
+                  </div>
+                  <div className="text-sm text-gray-500 mt-1">Overall</div>
+                </div>
+                <div className="text-center p-4 bg-gray-50 rounded">
+                  <div className={`text-3xl font-bold ${getScoreColor(fluencyData.fluency_metrics.overall_fluency_score)}`}>
+                    {fluencyData.fluency_metrics.overall_fluency_score}
+                  </div>
+                  <div className="text-sm text-gray-500 mt-1">Fluency</div>
+                </div>
+                <div className="text-center p-4 bg-gray-50 rounded">
+                  <div className={`text-3xl font-bold ${getScoreColor(fluencyData.coherence_metrics.overall_coherence_score)}`}>
+                    {fluencyData.coherence_metrics.overall_coherence_score}
+                  </div>
+                  <div className="text-sm text-gray-500 mt-1">Coherence</div>
+                </div>
+              </div>
+              
+              {/* Radar Chart */}
+              <div className="h-64 mb-6">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart 
+                    data={[
+                      { 
+                        metric: 'Speech Rate', 
+                        value: fluencyData.fluency_metrics.speech_rate,
+                        category: 'Fluency'
+                      },
+                      { 
+                        metric: 'Hesitation', 
+                        value: fluencyData.fluency_metrics.hesitation_ratio,
+                        category: 'Fluency'
+                      },
+                      { 
+                        metric: 'Pause Patterns', 
+                        value: fluencyData.fluency_metrics.pause_pattern_score,
+                        category: 'Fluency'
+                      },
+                      { 
+                        metric: 'Topic Consistency', 
+                        value: fluencyData.coherence_metrics.topic_consistency,
+                        category: 'Coherence'
+                      },
+                      { 
+                        metric: 'Logical Flow', 
+                        value: fluencyData.coherence_metrics.logical_flow,
+                        category: 'Coherence'
+                      },
+                      { 
+                        metric: 'Idea Development', 
+                        value: fluencyData.coherence_metrics.idea_development,
+                        category: 'Coherence'
+                      }
+                    ]} 
+                    margin={{ top:10, right: 10, bottom: 10, left: 10 }}
+                  >
+                    <PolarGrid />
+                    <PolarAngleAxis 
+                      dataKey="metric" 
+                      tick={{ fill: '#718096', fontSize: 12 }}
+                      tickLine={false}
+                      axisLineType="circle"
+                   />
+                    <PolarRadiusAxis 
+                      angle={90} 
+                      domain={[0, 100]} 
+                      tick={{ fill: '#A0AEC0' }}
+                      tickCount={5}
+                      axisLine={false} 
+                    />
+                    <Radar
+                      name="Performance"
+                      dataKey="value"
+                      stroke="#3B82F6"
+                      fill="#93C5FD"
+                      fillOpacity={0.6}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+              
+              {/* Key findings */}
+              <div className="mb-6">
+                <h3 className="text-lg font-medium text-gray-800 mb-2">Key Findings</h3>
+                <ul className="list-disc pl-6 space-y-1">
+                  {fluencyData.key_findings && fluencyData.key_findings.map((finding, index) => (
+                    <li key={index} className="text-gray-700">{finding}</li>
+                  ))}
+                </ul>
+              </div>
+              
+              {/* Improvement suggestions */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-800 mb-2">Improvement Suggestions</h3>
+                <ul className="list-disc pl-6 space-y-1">
+                  {fluencyData.improvement_suggestions && fluencyData.improvement_suggestions.map((suggestion, index) => (
+                    <li key={index} className="text-gray-700">{suggestion}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-gray-50 p-4 rounded border">
+              <p className="text-gray-600">No fluency and coherence data available for this recording.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+
+
+
     </div>
   );
 };
