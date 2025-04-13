@@ -3,7 +3,7 @@ import { useClass } from "@/context/ClassContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calendar, MessageSquare, Check, Play } from "lucide-react";
+import { ArrowLeft, Calendar, MessageSquare, Check, Play, HelpCircle } from "lucide-react";
 import AppNavbar from "@/components/AppNavbar";
 import { format } from "date-fns";
 import React, { useEffect, useState } from "react";
@@ -103,6 +103,12 @@ interface CustomTooltipProps {
     };
   }>;
   label?: string;
+}
+
+// Interface for question parsing
+interface QuestionWithExample {
+  question: string;
+  example: string;
 }
 
 interface AnalysisReport {
@@ -211,6 +217,28 @@ const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
   const fluencyCoherenceAnalysis = report.fluency_coherence_analysis || {};
   const fluencyRecordingKey = `recording_${activeAnalysisIndex + 1}`;
   const fluencyData = fluencyCoherenceAnalysis[fluencyRecordingKey];
+
+  // Helper function to parse question JSON if needed
+  const parseQuestionData = (questionText: string) => {
+    try {
+      // Check if the question is in JSON format containing an example
+      if (questionText.startsWith('{') && questionText.includes('"question"') && questionText.includes('"example"')) {
+        const parsed = JSON.parse(questionText);
+        return {
+          question: parsed.question || "",
+          example: parsed.example || ""
+        };
+      }
+    } catch (e) {
+      console.error("Error parsing question JSON:", e);
+    }
+    
+    // If not JSON or parsing failed, return the original text as the question
+    return { 
+      question: questionText,
+      example: ""
+    };
+  };
 
   return (
     <div className="bg-white shadow rounded-lg p-6 max-w-4xl mx-auto">
@@ -767,43 +795,87 @@ const StudentSubmissionView = () => {
   }, [showReport, submission.submission_uid]);
   
   // Render the standard audio responses
+  // Render the standard audio responses
   const renderSubmissionView = () => (
     <div className="space-y-6">
-      {assignment.questions.map((question, index) => (
-        <Card key={index}>
-          <CardHeader className="bg-muted/30">
-            <CardTitle className="text-lg">Question {index + 1}</CardTitle>
-          </CardHeader>
-          <CardContent className="p-6 space-y-4">
-            <p className="font-medium">{question}</p>
-            <div className="bg-muted/20 rounded-lg p-4">
-              <h4 className="font-medium mb-2 flex items-center">
-                <Check className="mr-2 h-4 w-4 text-green-500" />
-                Your Response
-              </h4>
-              {submission.answers[index]?.audioUrl ? (
-                <audio
-                  src={submission.answers[index].audioUrl}
-                  controls
-                  className="w-full"
-                />
-              ) : (
-                <p className="text-muted-foreground">No recording found</p>
+      {assignment.questions.map((questionText, index) => {
+        // Parse question data
+        const questionData = parseQuestionData(questionText);
+        
+        return (
+          <Card key={index}>
+            <CardHeader className="bg-muted/30">
+              <CardTitle className="text-lg flex justify-between items-center">
+                <span>Question {index + 1}</span>
+                {questionData.example && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="text-blue-500 hover:text-blue-600"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Toggle showing example in this card
+                      const exampleDiv = document.getElementById(`example-${index}`);
+                      if (exampleDiv) {
+                        const isHidden = exampleDiv.classList.contains('hidden');
+                        if (isHidden) {
+                          exampleDiv.classList.remove('hidden');
+                          e.currentTarget.textContent = "Hide Example";
+                        } else {
+                          exampleDiv.classList.add('hidden');
+                          e.currentTarget.textContent = "View Example";
+                        }
+                      }
+                    }}
+                  >
+                    <HelpCircle className="h-4 w-4 mr-1" /> View Example
+                  </Button>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 space-y-4">
+              <p className="font-medium">{questionData.question}</p>
+              
+              {questionData.example && (
+                <div id={`example-${index}`} className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 hidden">
+                  <div className="flex items-start mb-2">
+                    <div className="bg-blue-100 text-blue-700 text-xs font-medium px-2 py-1 rounded uppercase tracking-wide">
+                      Example Answer
+                    </div>
+                  </div>
+                  <p className="text-sm text-slate-700">{questionData.example}</p>
+                </div>
               )}
-            </div>
-
-            {hasFeedback && (
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                <h4 className="font-medium mb-2 flex items-center text-blue-800">
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  Teacher Feedback
+              
+              <div className="bg-muted/20 rounded-lg p-4">
+                <h4 className="font-medium mb-2 flex items-center">
+                  <Check className="mr-2 h-4 w-4 text-green-500" />
+                  Your Response
                 </h4>
-                <p>{submission.feedback?.comment || "Great job!"}</p>
+                {submission.answers[index]?.audioUrl ? (
+                  <audio
+                    src={submission.answers[index].audioUrl}
+                    controls
+                    className="w-full"
+                  />
+                ) : (
+                  <p className="text-muted-foreground">No recording found</p>
+                )}
               </div>
-            )}
-          </CardContent>
-        </Card>
-      ))}
+
+              {hasFeedback && (
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <h4 className="font-medium mb-2 flex items-center text-blue-800">
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    Teacher Feedback
+                  </h4>
+                  <p>{submission.feedback?.comment || "Great job!"}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 
@@ -895,6 +967,29 @@ const StudentSubmissionView = () => {
       </div>
     );
   }
+
+
+  // Helper function to parse question JSON if needed
+  const parseQuestionData = (questionText: string) => {
+    try {
+      // Check if the question is in JSON format containing an example
+      if (questionText.startsWith('{') && questionText.includes('"question"') && questionText.includes('"example"')) {
+        const parsed = JSON.parse(questionText);
+        return {
+          question: parsed.question || "",
+          example: parsed.example || ""
+        };
+      }
+    } catch (e) {
+      console.error("Error parsing question JSON:", e);
+    }
+    
+    // If not JSON or parsing failed, return the original text as the question
+    return { 
+      question: questionText,
+      example: ""
+    };
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
