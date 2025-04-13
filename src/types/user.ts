@@ -26,6 +26,12 @@ export interface Assignment {
   createdAt: string;
 }
 
+interface StudentClass {
+  student_id: string;
+  class_id: string;
+  overall_grade?: number; // Make it optional with ?
+}
+
 export interface Submission {
   id: string;               // This could be your auto-incremented ID (or the primary key)
   submission_uid: string;   // Your custom unique identifier (e.g. "temp_abc123")
@@ -40,6 +46,7 @@ export interface Submission {
   feedback?: {
     comment?: string;
     reviewed: boolean;
+    grade?: number;
   };
 }
 

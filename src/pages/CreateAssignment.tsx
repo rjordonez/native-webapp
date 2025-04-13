@@ -8,9 +8,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Switch } from "@/components/ui/switch";
+
+// Question with example type
+interface QuestionWithExample {
+  question: string;
+  example: string;
+}
 
 // Existing topic options
 const TOPICS = [
@@ -27,69 +35,194 @@ const TOPICS = [
   "Custom" 
 ];
 
-// Predefined question templates for each topic
-const TOPIC_QUESTIONS = {
+// Predefined question templates with simple examples for each topic
+const TOPIC_QUESTIONS: Record<string, QuestionWithExample[]> = {
   "Hometown": [
-    "Describe the place where you grew up. What was special about it?",
-    "How has your hometown changed over the years?",
-    "What are some popular attractions or activities in your hometown?",
-    "If you could change one thing about your hometown, what would it be and why?"
+    {
+      question: "Describe the place where you grew up. What was special about it?",
+      example: "I grew up in a small village near the mountains. It was very quiet and beautiful. There was a river where we could swim in summer. The best thing about my hometown was the clean air and friendly people."
+    },
+    {
+      question: "How has your hometown changed over the years?",
+      example: "My hometown has changed a lot. Now we have more houses and shops. Before, we only had one small market, but now we have a big supermarket. Many young people moved to the city for work, so there are fewer children now."
+    },
+    {
+      question: "What are some popular attractions or activities in your hometown?",
+      example: "In my hometown, visitors like to see the old church that is 200 years old. People enjoy walking in the forest and having picnics by the lake. In winter, many people go skiing on the small hill near the town."
+    },
+    {
+      question: "If you could change one thing about your hometown, what would it be and why?",
+      example: "If I could change one thing about my hometown, I would add a library. We don't have a place where people can read books or study. A library would help students and also give older people a place to meet and talk."
+    }
   ],
   "Family": [
-    "Tell me about your family members and their personalities.",
-    "What family traditions or celebrations are important to you?",
-    "How would you describe your role in your family?",
-    "Share a memorable experience you've had with your family."
+    {
+      question: "Tell me about your family members and their personalities.",
+      example: "I have a small family. My mother is very kind and always helps others. My father is funny and likes to tell jokes. My sister is smart and studies hard at school. We also have a dog named Max who is very playful."
+    },
+    {
+      question: "What family traditions or celebrations are important to you?",
+      example: "In my family, we always eat dinner together on Sundays. For New Year, we make special food and visit our grandparents. On birthdays, we sing songs and give small gifts to each other. These traditions make us feel close."
+    },
+    {
+      question: "How would you describe your role in your family?",
+      example: "In my family, I help my parents with technology. I show them how to use computers and smartphones. I also take care of our garden and plants. Sometimes I cook dinner when my parents are busy with work."
+    },
+    {
+      question: "Share a memorable experience you've had with your family.",
+      example: "Last year, we went camping by a lake. We set up our tent and made a fire to cook food. At night, we saw many stars in the sky. We told stories and sang songs. It was simple, but I will always remember that happy time."
+    }
   ],
   "Work": [
-    "Describe your current job or a job you've had in the past.",
-    "What do you find most challenging about your work?",
-    "How do you maintain work-life balance?",
-    "Where do you see yourself professionally in five years?"
+    {
+      question: "Describe your current job or a job you've had in the past.",
+      example: "I work in a small shop that sells clothes. I help customers find what they need and use the cash register. I also organize the items on shelves and keep the shop clean. I work five days each week from 9 AM to 5 PM."
+    },
+    {
+      question: "What do you find most challenging about your work?",
+      example: "The most challenging part of my job is when many customers come at the same time. It's hard to help everyone quickly. Also, sometimes customers are unhappy and complain. I need to stay calm and solve their problems."
+    },
+    {
+      question: "How do you maintain work-life balance?",
+      example: "To balance work and life, I don't check work emails at home. I spend time with friends on weekends. I also have a hobby - I like to draw. Every evening, I draw for 30 minutes to relax after work."
+    },
+    {
+      question: "Where do you see yourself professionally in five years?",
+      example: "In five years, I hope to become a manager at my shop. I am learning about business management now. Maybe I will also improve my English to help international customers. If possible, I would like to earn more money to support my family."
+    }
   ],
   "Education": [
-    "What was your school experience like growing up?",
-    "Describe a teacher who had a significant impact on you.",
-    "What subject did you enjoy studying the most and why?",
-    "How has education shaped who you are today?"
+    {
+      question: "What was your school experience like growing up?",
+      example: "When I was in school, I had classes from 8 AM to 3 PM. My favorite subject was science. I had many friends, and we played sports during breaks. Our teachers were strict but helpful. We had to wear uniforms - blue pants and white shirts."
+    },
+    {
+      question: "Describe a teacher who had a significant impact on you.",
+      example: "My math teacher, Mr. Lee, changed how I think about learning. He was patient and explained things clearly. When I made mistakes, he never made me feel bad. He showed me that it's okay to ask questions. Because of him, I started to like math."
+    },
+    {
+      question: "What subject did you enjoy studying the most and why?",
+      example: "I enjoyed studying history the most because I learned about how people lived long ago. I liked reading stories about kings, wars, and different countries. History helped me understand why the world is the way it is today."
+    },
+    {
+      question: "How has education shaped who you are today?",
+      example: "Education taught me how to solve problems and think logically. I learned to read and write, which helps me every day. School also taught me to work with other people. Most importantly, education gave me confidence to try new things."
+    }
   ],
   "Hobbies": [
-    "What activities do you enjoy doing in your free time?",
-    "How did you first become interested in your favorite hobby?",
-    "Have you learned any important life lessons from your hobbies?",
-    "Is there a hobby you'd like to try but haven't had the chance yet?"
+    {
+      question: "What activities do you enjoy doing in your free time?",
+      example: "In my free time, I enjoy cooking new recipes. I also like to go for walks in the park near my house. On weekends, I watch movies with my friends. Sometimes I play chess with my neighbor. These activities help me relax."
+    },
+    {
+      question: "How did you first become interested in your favorite hobby?",
+      example: "I became interested in photography when my uncle gave me an old camera for my birthday. At first, I just took pictures of my family. Then I started taking photos of nature and buildings. Now I practice taking better pictures every week."
+    },
+    {
+      question: "Have you learned any important life lessons from your hobbies?",
+      example: "From playing soccer, I learned that teamwork is important. I also learned that practice makes you better. When I make mistakes, I don't give up. These lessons help me in school and work too."
+    },
+    {
+      question: "Is there a hobby you'd like to try but haven't had the chance yet?",
+      example: "I would like to try playing the guitar. I love music and want to learn how to play songs. I haven't started yet because guitars are expensive, and I need to find a teacher. Maybe next year I can begin this new hobby."
+    }
   ],
   "Travel": [
-    "What has been your most memorable travel experience?",
-    "Describe a place you've visited that you would recommend to others.",
-    "How do you prepare for a trip to a new destination?",
-    "If you could travel anywhere in the world, where would you go and why?"
+    {
+      question: "What has been your most memorable travel experience?",
+      example: "My most memorable trip was visiting my grandparents' village. We took a long bus ride through the mountains. The village had no tall buildings, only small houses. I saw how people grow their own food and live simply. It was very different from my city."
+    },
+    {
+      question: "Describe a place you've visited that you would recommend to others.",
+      example: "I would recommend visiting the lake near my town. The water is very clean, and you can swim in summer. There are small restaurants where you can eat fresh fish. You can rent a boat or just sit and enjoy the view of mountains around the lake."
+    },
+    {
+      question: "How do you prepare for a trip to a new destination?",
+      example: "Before a trip, I check the weather to know what clothes to bring. I make a list of important items like my ID card, money, and phone charger. I also learn a few basic words if people speak a different language there."
+    },
+    {
+      question: "If you could travel anywhere in the world, where would you go and why?",
+      example: "If I could go anywhere, I would visit Japan. I want to see the cherry blossoms in spring and try Japanese food. I'm interested in their traditional houses and gardens. I also want to ride the fast trains between cities."
+    }
   ],
   "Food": [
-    "What are some of your favorite dishes or cuisines?",
-    "Do you enjoy cooking? If so, what do you like to prepare?",
-    "Describe a memorable meal you've had.",
-    "How important is food in your culture or family traditions?"
+    {
+      question: "What are some of your favorite dishes or cuisines?",
+      example: "My favorite food is pasta with tomato sauce. I also like chicken soup when it's cold outside. For breakfast, I enjoy bread with honey. From other countries, I like Chinese fried rice and Mexican tacos."
+    },
+    {
+      question: "Do you enjoy cooking? If so, what do you like to prepare?",
+      example: "Yes, I enjoy cooking simple meals. I often make vegetable soup because it's healthy and easy. On weekends, I bake cookies with my children. I can also make a good omelet with cheese and tomatoes for breakfast."
+    },
+    {
+      question: "Describe a memorable meal you've had.",
+      example: "For my 30th birthday, my family cooked a special dinner. We had grilled fish, rice, and many vegetable dishes. My mother made my favorite cake with chocolate. We ate outside in our garden. The food was delicious, and I felt very happy."
+    },
+    {
+      question: "How important is food in your culture or family traditions?",
+      example: "Food is very important in my culture. During holidays, families spend many hours cooking traditional dishes. We have special foods for weddings, birthdays, and religious celebrations. Sharing meals brings people together and shows love."
+    }
   ],
   "Technology": [
-    "How has technology changed your daily life?",
-    "What technological advancement are you most excited about?",
-    "Do you think technology has more positive or negative effects on society?",
-    "Describe your relationship with social media."
+    {
+      question: "How has technology changed your daily life?",
+      example: "Technology has changed how I do many things. I use my phone to talk with family who live far away. I can check the weather before going outside. At work, computers help me do tasks faster. I also watch videos to learn new skills."
+    },
+    {
+      question: "What technological advancement are you most excited about?",
+      example: "I am excited about electric cars. They don't pollute the air and are quieter. As batteries improve, these cars can go farther. I hope they will become cheaper so more people can buy them. This will help our environment."
+    },
+    {
+      question: "Do you think technology has more positive or negative effects on society?",
+      example: "I think technology has more positive effects. It helps doctors treat sick people. Students can learn from home using computers. However, there are some problems too. Some people use phones too much and don't talk face-to-face anymore."
+    },
+    {
+      question: "Describe your relationship with social media.",
+      example: "I use social media to see photos from my friends and family. I check Facebook about once a day. I don't post many things myself. I try not to spend too much time scrolling. I prefer talking on the phone or meeting in person."
+    }
   ],
   "Environment": [
-    "What environmental issues concern you the most?",
-    "What steps do you take to reduce your environmental impact?",
-    "How has the environment in your area changed over time?",
-    "What do you think individuals can do to address climate change?"
+    {
+      question: "What environmental issues concern you the most?",
+      example: "I worry about plastic pollution. When I go to the beach, I see plastic bottles and bags in the water and sand. This is bad for fish and birds. I also worry about cutting down too many trees, which causes animals to lose their homes."
+    },
+    {
+      question: "What steps do you take to reduce your environmental impact?",
+      example: "To help the environment, I bring my own bags when shopping. I try to use less water by taking shorter showers. I walk or use the bus instead of driving when possible. At home, I turn off lights when I leave a room to save energy."
+    },
+    {
+      question: "How has the environment in your area changed over time?",
+      example: "In my area, there are more buildings now and fewer trees. The river that was clean when I was a child now has pollution. Summers feel hotter than before. But there is some good news - our city started a recycling program last year."
+    },
+    {
+      question: "What do you think individuals can do to address climate change?",
+      example: "People can do small things that help. We can use less electricity and water. We can eat less meat and more vegetables. We can fix things instead of buying new ones. If many people make these small changes, it will make a big difference."
+    }
   ],
   "Health": [
-    "How do you maintain your physical and mental health?",
-    "What healthy habits have you developed over time?",
-    "How has your approach to health changed as you've gotten older?",
-    "What advice would you give someone trying to improve their health?"
+    {
+      question: "How do you maintain your physical and mental health?",
+      example: "For my physical health, I walk for 30 minutes every day and eat fruits and vegetables. For mental health, I talk with friends when I feel worried. I also try to sleep 8 hours each night. On weekends, I spend time in nature to feel calm."
+    },
+    {
+      question: "What healthy habits have you developed over time?",
+      example: "Over the years, I learned to drink more water instead of sweet drinks. I started to read before bed instead of looking at my phone. I also try to eat slowly and enjoy my food. These small habits make me feel better."
+    },
+    {
+      question: "How has your approach to health changed as you've gotten older?",
+      example: "When I was young, I didn't think about health much. Now I'm more careful about what I eat. I check with a doctor once a year. I try to exercise regularly, not just sometimes. I understand now that good health makes life better."
+    },
+    {
+      question: "What advice would you give someone trying to improve their health?",
+      example: "Start with small changes. Try to walk more each day. Add one vegetable to your meals. Go to sleep at the same time every night. Don't try to change everything at once. Be patient and kind to yourself when making healthy changes."
+    }
   ],
-  "Custom": [""] // Empty for custom topics
+  "Custom": [
+    {
+      question: "",
+      example: ""
+    }
+  ] // Empty for custom topics
 };
 
 const CreateAssignment = () => {
@@ -107,17 +240,18 @@ const CreateAssignment = () => {
   const [topic, setTopic] = useState(TOPICS[0]);
   const [customTopicName, setCustomTopicName] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [questions, setQuestions] = useState<string[]>([""]);
+  const [questionsWithExamples, setQuestionsWithExamples] = useState<QuestionWithExample[]>([{ question: "", example: "" }]);
   const [useTemplate, setUseTemplate] = useState(true);
+  const [includeExamples, setIncludeExamples] = useState(true);
 
   // Update questions when topic changes (if using template)
   useEffect(() => {
     if (useTemplate && topic !== "Custom") {
-      setQuestions([...TOPIC_QUESTIONS[topic]]);
+      setQuestionsWithExamples([...TOPIC_QUESTIONS[topic]]);
     } else if (topic === "Custom") {
       setUseTemplate(false);
       // Start with one empty question for custom topics
-      setQuestions([""]);
+      setQuestionsWithExamples([{ question: "", example: "" }]);
     }
   }, [topic, useTemplate]);
 
@@ -131,7 +265,7 @@ const CreateAssignment = () => {
   };
 
   const handleAddQuestion = () => {
-    setQuestions([...questions, ""]);
+    setQuestionsWithExamples([...questionsWithExamples, { question: "", example: "" }]);
     // If adding questions manually, turn off template
     if (useTemplate) {
       setUseTemplate(false);
@@ -139,9 +273,9 @@ const CreateAssignment = () => {
   };
 
   const handleQuestionChange = (index: number, value: string) => {
-    const newQuestions = [...questions];
-    newQuestions[index] = value;
-    setQuestions(newQuestions);
+    const newQuestionsWithExamples = [...questionsWithExamples];
+    newQuestionsWithExamples[index].question = value;
+    setQuestionsWithExamples(newQuestionsWithExamples);
     
     // If modifying template questions, turn off automatic template
     if (useTemplate) {
@@ -149,11 +283,22 @@ const CreateAssignment = () => {
     }
   };
 
+  const handleExampleChange = (index: number, value: string) => {
+    const newQuestionsWithExamples = [...questionsWithExamples];
+    newQuestionsWithExamples[index].example = value;
+    setQuestionsWithExamples(newQuestionsWithExamples);
+    
+    // If modifying template examples, turn off automatic template
+    if (useTemplate) {
+      setUseTemplate(false);
+    }
+  };
+
   const handleRemoveQuestion = (index: number) => {
-    if (questions.length > 1) {
-      const newQuestions = [...questions];
-      newQuestions.splice(index, 1);
-      setQuestions(newQuestions);
+    if (questionsWithExamples.length > 1) {
+      const newQuestionsWithExamples = [...questionsWithExamples];
+      newQuestionsWithExamples.splice(index, 1);
+      setQuestionsWithExamples(newQuestionsWithExamples);
       
       // If removing template questions, turn off automatic template
       if (useTemplate) {
@@ -188,14 +333,34 @@ const CreateAssignment = () => {
     }
     
     // Validate that no questions are empty
-    if (questions.some(q => !q.trim())) {
+    if (questionsWithExamples.some(q => !q.question.trim())) {
       toast("Please fill in all questions");
       return;
     }
     
     // Create the assignment with the appropriate topic name
     const finalTopicName = topic === "Custom" ? customTopicName : topic;
-    createAssignment(classId, title, dueDate, finalTopicName, questions);
+    
+    // Extract just the questions for the current API format, or include examples if needed
+    if (includeExamples) {
+      // Assume updated API can handle both questions and examples
+      createAssignment(
+        classId, 
+        title, 
+        dueDate, 
+        finalTopicName, 
+        questionsWithExamples
+      );
+    } else {
+      // Use existing API format with just questions
+      createAssignment(
+        classId, 
+        title, 
+        dueDate, 
+        finalTopicName, 
+        questionsWithExamples.map(qe => qe.question)
+      );
+    }
     
     // Navigate back to class details
     navigate(`/class/${classId}`);
@@ -204,7 +369,7 @@ const CreateAssignment = () => {
   // Reset to template questions
   const handleResetToTemplate = () => {
     if (topic !== "Custom") {
-      setQuestions([...TOPIC_QUESTIONS[topic]]);
+      setQuestionsWithExamples([...TOPIC_QUESTIONS[topic]]);
       setUseTemplate(true);
     }
   };
@@ -297,6 +462,17 @@ const CreateAssignment = () => {
                   </div>
                 </div>
                 
+                <div className="flex items-center space-x-2">
+                  <Switch 
+                    id="includeExamples" 
+                    checked={includeExamples} 
+                    onCheckedChange={setIncludeExamples} 
+                  />
+                  <Label htmlFor="includeExamples">
+                    Include example answers for students (helpful for beginners)
+                  </Label>
+                </div>
+                
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <Label>Questions</Label>
@@ -313,28 +489,58 @@ const CreateAssignment = () => {
                     </div>
                   </div>
                   
-                  <div className="space-y-3">
-                    {questions.map((question, index) => (
-                      <div key={index} className="flex gap-2">
-                        <div className="flex-grow">
-                          <Textarea
-                            value={question}
-                            onChange={(e) => handleQuestionChange(index, e.target.value)}
-                            placeholder={`Question ${index + 1}`}
-                            className="resize-none"
-                            rows={2}
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          onClick={() => handleRemoveQuestion(index)}
-                          disabled={questions.length === 1}
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                      </div>
+                  <div className="space-y-4">
+                    {questionsWithExamples.map((item, index) => (
+                      <Accordion 
+                        key={index} 
+                        type="single" 
+                        collapsible 
+                        className="border rounded-md"
+                      >
+                        <AccordionItem value={`question-${index}`} className="border-none">
+                          <div className="flex gap-2 p-2">
+                            <div className="flex-grow">
+                              <Textarea
+                                value={item.question}
+                                onChange={(e) => handleQuestionChange(index, e.target.value)}
+                                placeholder={`Question ${index + 1}`}
+                                className="resize-none mb-2"
+                                rows={2}
+                              />
+                              
+                              <AccordionTrigger className="py-1">
+                                {includeExamples ? "Example Answer (Optional)" : "Example Answer (Hidden from Students)"}
+                              </AccordionTrigger>
+                              
+                              <AccordionContent>
+                                <Textarea
+                                  value={item.example}
+                                  onChange={(e) => handleExampleChange(index, e.target.value)}
+                                  placeholder="Provide a simple example answer that students can reference if needed"
+                                  className="resize-none mt-2"
+                                  rows={3}
+                                />
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  {includeExamples ? 
+                                    "Students will have the option to view this example if they're stuck." :
+                                    "This example is for your reference only and won't be shown to students."}
+                                </p>
+                              </AccordionContent>
+                            </div>
+                            
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={() => handleRemoveQuestion(index)}
+                              disabled={questionsWithExamples.length === 1}
+                              className="h-10 self-start"
+                            >
+                              <Trash2 size={16} />
+                            </Button>
+                          </div>
+                        </AccordionItem>
+                      </Accordion>
                     ))}
                   </div>
                 </div>

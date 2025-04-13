@@ -7,11 +7,26 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calendar, Clock, Mic, ArrowRight, Check, Square } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, Mic, ArrowRight, Check, Square, HelpCircle, X } from "lucide-react";
 import AppNavbar from "@/components/AppNavbar";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { sendToAnalysisAPI } from "@/lib/api-services";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+// Extended Assignment interface to include examples
+interface QuestionWithExample {
+  question: string;
+  example: string;
+}
 
 const StudentAssignmentDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -31,6 +46,7 @@ const StudentAssignmentDetails = () => {
   const [timeLeft, setTimeLeft] = useState(40);
   const [isUploading, setIsUploading] = useState(false);
   const [currentSubmission, setCurrentSubmission] = useState<Submission | undefined>();
+  const [showExampleDialog, setShowExampleDialog] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
   
@@ -46,6 +62,42 @@ const StudentAssignmentDetails = () => {
     currentSubmission?.answers.map(answer => answer.audioUrl || "") || [],
     [currentSubmission]
   );
+  
+  // Parse the question to extract the question text and example
+  const currentQuestionData = useMemo(() => {
+    if (!assignment || !assignment.questions[currentQuestionIndex]) return { question: "", example: "" };
+    
+    const questionText = assignment.questions[currentQuestionIndex];
+    
+    try {
+      // Check if the question is in JSON format containing an example
+      if (questionText.startsWith('{') && questionText.includes('"question"') && questionText.includes('"example"')) {
+        const parsed = JSON.parse(questionText) as QuestionWithExample;
+        return {
+          question: parsed.question || "",
+          example: parsed.example || ""
+        };
+      }
+    } catch (e) {
+      console.error("Error parsing question JSON:", e);
+    }
+    
+    // If not JSON or parsing failed, return the original text as the question
+    return { 
+      question: questionText,
+      example: ""
+    };
+  }, [assignment, currentQuestionIndex]);
+
+  // Check if the current question has an example
+  const hasExample = useMemo(() => {
+    return !!(currentQuestionData.example && currentQuestionData.example.trim());
+  }, [currentQuestionData]);
+
+  // Get the current example text
+  const currentExample = useMemo(() => {
+    return currentQuestionData.example || "";
+  }, [currentQuestionData]);
 
   // Setup media recorder
   useEffect(() => {
@@ -187,6 +239,11 @@ const StudentAssignmentDetails = () => {
       mediaRecorderRef.current.stop();
     }
   }, []);
+
+  // Close example dialog when changing questions
+  useEffect(() => {
+    setShowExampleDialog(false);
+  }, [currentQuestionIndex]);
 
   // Modified toggleRecording to clear previous recordings and persist "in_progress" status
   const toggleRecording = useCallback(() => {
@@ -385,12 +442,22 @@ const StudentAssignmentDetails = () => {
         
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle>
-              Question {currentQuestionIndex + 1} of {assignment.questions.length}
+            <CardTitle className="flex justify-between items-center">
+              <span>Question {currentQuestionIndex + 1} of {assignment.questions.length}</span>
+              {hasExample && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowExampleDialog(true)}
+                  className="text-blue-500 hover:text-blue-600"
+                >
+                  <HelpCircle className="h-4 w-4 mr-1" /> View Example
+                </Button>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-lg">{assignment.questions[currentQuestionIndex]}</p>
+            <p className="text-lg">{currentQuestionData.question}</p>
             
             <div className="bg-muted/40 rounded-lg p-6 flex flex-col items-center">
               {audioUrls[currentQuestionIndex] ? (
@@ -490,6 +557,35 @@ const StudentAssignmentDetails = () => {
             ))}
           </div>
         </div>
+
+        {/* Example Dialog */}
+        <AlertDialog open={showExampleDialog} onOpenChange={setShowExampleDialog}>
+          <AlertDialogContent className="max-w-md">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex justify-between items-center">
+                <span>Example Answer</span>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-8 w-8 p-0" 
+                  onClick={() => setShowExampleDialog(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-foreground">
+                <div className="mt-2 text-sm bg-muted/30 p-4 rounded-md">
+                  {currentExample}
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setShowExampleDialog(false)}>
+                Got it
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     </div>
   );
