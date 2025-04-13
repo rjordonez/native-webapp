@@ -256,7 +256,6 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
     };
   };
 
-
   return (
     <div className="bg-white shadow rounded-lg p-6 max-w-4xl mx-auto">
       {/* Header */}
