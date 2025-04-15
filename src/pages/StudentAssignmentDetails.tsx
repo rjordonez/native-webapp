@@ -12,21 +12,7 @@ import AppNavbar from "@/components/AppNavbar";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { sendToAnalysisAPI } from "@/lib/api-services";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
-// Extended Assignment interface to include examples
-interface QuestionWithExample {
-  question: string;
-  example: string;
-}
 
 // Interface for parsed metadata
 interface QuestionWithTimeLimit {
