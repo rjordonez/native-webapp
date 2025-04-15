@@ -28,6 +28,10 @@ interface QuestionWithExample {
   example: string;
 }
 
+// Define the minimum recording duration
+const MINIMUM_RECORDING_SECONDS = 5;
+const TOTAL_RECORDING_SECONDS = 40; // Use a constant for total time
+
 const StudentAssignmentDetails = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -43,10 +47,12 @@ const StudentAssignmentDetails = () => {
   
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(40);
+  const [timeLeft, setTimeLeft] = useState(TOTAL_RECORDING_SECONDS);
   const [isUploading, setIsUploading] = useState(false);
   const [currentSubmission, setCurrentSubmission] = useState<Submission | undefined>();
   const [showExampleDialog, setShowExampleDialog] = useState(false);
+  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null); // Track recording start time
+  const [isStopDisabled, setIsStopDisabled] = useState(false); // Track if stop button is disabled by minimum time
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
   
@@ -99,6 +105,21 @@ const StudentAssignmentDetails = () => {
     return currentQuestionData.example || "";
   }, [currentQuestionData]);
 
+  // Define stopRecording *before* the timer useEffect that uses it
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop(); // This will trigger handleStop
+      setIsRecording(false);
+      // Don't reset timeLeft here, let the next start handle it or the useEffect timer
+      // Don't reset recordingStartTime or isStopDisabled here, handleStop does it
+    } else {
+       // Ensure consistency if called when not recording
+       setIsRecording(false);
+       setIsStopDisabled(false);
+       setRecordingStartTime(null);
+    }
+  }, [setIsRecording, setIsStopDisabled, setRecordingStartTime]); // Updated dependencies to include setters used
+
   // Setup media recorder
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -115,8 +136,14 @@ const StudentAssignmentDetails = () => {
         };
         
         const handleStop = async () => {
+          // Reset start time and disabled status when stopped
+          setRecordingStartTime(null);
+          setIsStopDisabled(false); 
+
           const chunks = recordedChunksRef.current;
-          if (chunks.length === 0) return;
+          recordedChunksRef.current = []; 
+
+          if (chunks.length === 0) return; 
           
           const audioBlob = new Blob(chunks, { type: 'audio/webm' });
           
@@ -168,8 +195,6 @@ const StudentAssignmentDetails = () => {
               setIsUploading(false);
             }
           }
-          
-          recordedChunksRef.current = [];
         };
 
         recorder.addEventListener('dataavailable', handleDataAvailable);
@@ -186,13 +211,16 @@ const StudentAssignmentDetails = () => {
     
     return () => {
       if (mediaRecorderRef.current?.state === 'recording') {
-        mediaRecorderRef.current.stop();
+        try { mediaRecorderRef.current.stop(); } catch (e) { console.error("Cleanup stop error:", e); }
       }
       if (mediaRecorderRef.current) {
         mediaRecorderRef.current.stream?.getTracks().forEach(track => track.stop());
       }
+      recordedChunksRef.current = [];
+      setRecordingStartTime(null); // Reset on unmount/re-render
+      setIsStopDisabled(false);
     };
-  }, [assignment, user, currentQuestionIndex, uploadAudio, updateSubmission]);
+  }, [assignment, user, currentQuestionIndex, uploadAudio, updateSubmission, setRecordingStartTime, setIsStopDisabled, setIsUploading, setCurrentSubmission]);
 
   // Initialize submission
   useEffect(() => {
@@ -216,36 +244,54 @@ const StudentAssignmentDetails = () => {
     setCurrentSubmission(submission);
   }, [assignment, user, submissions]);
 
-  // Recording timer
+  // Recording timer: Handles countdown AND stop button disable logic
   useEffect(() => {
     let timer: number | undefined;
-    
-    if (isRecording && timeLeft > 0) {
-      timer = window.setInterval(() => {
-        setTimeLeft(prev => prev - 1);
-      }, 1000);
-    } else if (isRecording && timeLeft === 0) {
-      stopRecording();
+
+    if (isRecording) {
+      // Check elapsed time for disabling stop button
+      const now = Date.now();
+      const elapsed = recordingStartTime ? now - recordingStartTime : 0;
+      
+      if (elapsed < MINIMUM_RECORDING_SECONDS * 1000) {
+        setIsStopDisabled(true);
+      } else {
+         // Once 5 seconds have passed, ensure button is enabled
+        setIsStopDisabled(false); 
+      }
+
+      // Handle countdown timer
+      if (timeLeft > 0) {
+        timer = window.setInterval(() => {
+          setTimeLeft(prev => prev - 1);
+          // Re-check elapsed time every second within the timer as well
+          const currentElapsed = recordingStartTime ? Date.now() - recordingStartTime : 0;
+           if (currentElapsed >= MINIMUM_RECORDING_SECONDS * 1000 && isStopDisabled) {
+              setIsStopDisabled(false);
+           }
+        }, 1000);
+      } else {
+        // Time ran out, stop recording
+        console.log("Timer reached 0, stopping recording.");
+        stopRecording(); // Now stopRecording is defined
+      }
+    } else {
+      // Ensure button is not disabled if not recording
+      setIsStopDisabled(false);
     }
     
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [isRecording, timeLeft]);
-
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      setIsRecording(false);
-      mediaRecorderRef.current.stop();
-    }
-  }, []);
+  // Dependencies include states checked/set inside
+  }, [isRecording, timeLeft, recordingStartTime, stopRecording, setIsStopDisabled, isStopDisabled, setTimeLeft]); // Added setTimeLeft
 
   // Close example dialog when changing questions
   useEffect(() => {
     setShowExampleDialog(false);
   }, [currentQuestionIndex]);
 
-  // Modified toggleRecording to clear previous recordings and persist "in_progress" status
+  // toggleRecording: Sets start time or calls stopRecording
   const toggleRecording = useCallback(() => {
     if (!mediaRecorderRef.current) {
       toast.error('Microphone not ready. Please refresh the page.');
@@ -253,51 +299,41 @@ const StudentAssignmentDetails = () => {
     }
 
     if (isRecording) {
-      stopRecording();
+      // Stop button was clicked - stopRecording handles the rest
+      // The button itself is disabled for the first 5s by the timer effect
+      stopRecording(); 
     } else {
-      // When starting a new recording, clear the previous saved recording for this question
+      // --- Start Recording ---
+      // Clear previous audio URL if any
       if (audioUrls[currentQuestionIndex]) {
-        // Clear the saved audio URL from the current submission
         setCurrentSubmission(prev => {
           if (!prev) return prev;
           const updatedAnswers = [...prev.answers];
-          updatedAnswers[currentQuestionIndex] = {
-            ...updatedAnswers[currentQuestionIndex],
-            audioUrl: ""  // Clear the audio URL
-          };
-          
-          // Create updated submission object with correct type
-          const updatedSubmission = {
-            ...prev,
-            status: "in_progress" as const, // Use const assertion to fix the type
-            answers: updatedAnswers
-          };
-          
-          // Persist this change to the context/backend if we already have some answers
-          // Check if we have at least one answer with an audio URL
+          updatedAnswers[currentQuestionIndex] = { ...updatedAnswers[currentQuestionIndex], audioUrl: "" };
+          const updatedSubmission = { ...prev, status: "in_progress" as const, answers: updatedAnswers };
           const hasAnyRecordings = updatedAnswers.some(a => a.audioUrl && a.audioUrl.trim() !== "");
           if (hasAnyRecordings) {
-            updateSubmission(updatedSubmission)
-              .then(() => console.log("Submission status updated after clearing audio"))
-              .catch(err => console.error("Failed to update submission:", err));
+            updateSubmission(updatedSubmission).catch(err => console.error("Failed update:", err));
           }
-          
           return updatedSubmission;
         });
       }
       
-      recordedChunksRef.current = [];
+      recordedChunksRef.current = []; 
+      setRecordingStartTime(Date.now()); // Set start time
       setIsRecording(true);
-      setTimeLeft(40);
-      mediaRecorderRef.current.start(100);
+      setIsStopDisabled(true); // Initially disable stop button
+      setTimeLeft(TOTAL_RECORDING_SECONDS); // Reset timer
+      mediaRecorderRef.current.start(100); 
+      toast.info(`Recording started. Minimum duration: ${MINIMUM_RECORDING_SECONDS} seconds.`);
     }
-  }, [isRecording, stopRecording, audioUrls, currentQuestionIndex, updateSubmission]);
+  }, [isRecording, stopRecording, audioUrls, currentQuestionIndex, updateSubmission, setCurrentSubmission, setRecordingStartTime, setIsRecording, setIsStopDisabled, setTimeLeft]);
 
   const goToNextQuestion = useCallback(() => {
     if (assignment && currentQuestionIndex < assignment.questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setIsRecording(false);
-      setTimeLeft(40);
+      setTimeLeft(TOTAL_RECORDING_SECONDS);
     }
   }, [assignment, currentQuestionIndex]);
 
@@ -305,7 +341,7 @@ const StudentAssignmentDetails = () => {
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
       setIsRecording(false);
-      setTimeLeft(40);
+      setTimeLeft(TOTAL_RECORDING_SECONDS);
     }
   }, [currentQuestionIndex]);
 
@@ -460,7 +496,7 @@ const StudentAssignmentDetails = () => {
             <p className="text-lg">{currentQuestionData.question}</p>
             
             <div className="bg-muted/40 rounded-lg p-6 flex flex-col items-center">
-              {audioUrls[currentQuestionIndex] ? (
+              {audioUrls[currentQuestionIndex] && !isRecording ? (
                 <div className="w-full">
                   <div className="mb-4 text-center text-green-600 font-medium flex items-center justify-center">
                     <Check className="mr-2 h-5 w-5" />
@@ -486,8 +522,10 @@ const StudentAssignmentDetails = () => {
                     <Button
                       size="lg"
                       className={`rounded-full p-8 ${isRecording ? "bg-red-500 hover:bg-red-600" : ""}`}
+                      // Disable stop if uploading OR if minimum time hasn't passed
+                      disabled={isUploading || (isRecording && isStopDisabled)} 
                       onClick={toggleRecording}
-                      disabled={isUploading}
+                      title={isRecording && isStopDisabled ? `Cannot stop for ${MINIMUM_RECORDING_SECONDS} seconds` : (isRecording ? "Stop Recording" : "Start Recording")} // Add tooltip
                     >
                       {isRecording ? (
                         <Square className="h-8 w-8" />
@@ -498,9 +536,17 @@ const StudentAssignmentDetails = () => {
                   </div>
                   
                   {isRecording ? (
-                    <div className="text-lg font-semibold">
-                      Recording: {timeLeft} seconds left
-                    </div>
+                    <>
+                      <div className="text-lg font-semibold mb-2">
+                        Recording: {timeLeft} seconds left
+                      </div>
+                      {/* Show message only when stop is actually disabled */}
+                      {isStopDisabled && ( 
+                        <div className="text-sm text-blue-500">
+                          Minimum recording time: {MINIMUM_RECORDING_SECONDS} seconds (cannot stop yet)
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <div className="text-muted-foreground">
                       {isUploading ? "Processing..." : "Click to start recording"}
@@ -548,7 +594,7 @@ const StudentAssignmentDetails = () => {
                 onClick={() => {
                   setCurrentQuestionIndex(index);
                   setIsRecording(false);
-                  setTimeLeft(40);
+                  setTimeLeft(TOTAL_RECORDING_SECONDS);
                 }}
                 disabled={isUploading}
               >
