@@ -464,160 +464,204 @@ const CreateAssignment = () => {
               </CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit}>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="title">Assignment Title</Label>
-                    <Input
-                      id="title"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="Enter a title"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="class">Assign to Class</Label>
-                    <Select value={classId} onValueChange={setClassId}>
-                      <SelectTrigger id="class">
-                        <SelectValue placeholder="Select a class" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {teacherClasses.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+
+            <CardContent className="space-y-6">
+  {/* First row - Title and Class (2-column) */}
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="space-y-2">
+      <Label htmlFor="title">Assignment Title</Label>
+      <Input
+        id="title"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Enter a title"
+        required
+      />
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="class">Assign to Class</Label>
+      <Select value={classId} onValueChange={setClassId}>
+        <SelectTrigger id="class">
+          <SelectValue placeholder="Select a class" />
+        </SelectTrigger>
+        <SelectContent>
+          {teacherClasses.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  </div>
+  
+  {/* Second row - Topic and Due Date (2-column) */}
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="space-y-2">
+      <Label htmlFor="topic">Topic</Label>
+      <Select value={topic} onValueChange={handleTopicChange}>
+        <SelectTrigger id="topic">
+          <SelectValue placeholder="Select a topic" />
+        </SelectTrigger>
+        <SelectContent>
+          {TOPICS.map((t) => (
+            <SelectItem key={t} value={t}>
+              {t}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="dueDate">Due Date</Label>
+      <Input
+        id="dueDate"
+        type="date"
+        value={dueDate}
+        onChange={(e) => setDueDate(e.target.value)}
+        min={new Date().toISOString().split('T')[0]}
+        required
+      />
+    </div>
+  </div>
+  
+  {/* Custom Topic Name (conditional, full width) */}
+  {topic === "Custom" && (
+    <div className="space-y-2">
+      <Label htmlFor="customTopicName">Custom Topic Name</Label>
+      <Input
+        id="customTopicName"
+        value={customTopicName}
+        onChange={(e) => setCustomTopicName(e.target.value)}
+        placeholder="Enter a name for your custom topic"
+        required={topic === "Custom"}
+      />
+    </div>
+  )}
+  
+  {/* Include Examples Switch (styled as a card or with borders) */}
+  <div className="flex items-center justify-between p-4 border rounded-md bg-muted/10">
+    <div className="flex items-center space-x-2">
+      <Switch 
+        id="includeExamples" 
+        checked={includeExamples} 
+        onCheckedChange={setIncludeExamples} 
+      />
+      <Label htmlFor="includeExamples" className="font-medium">
+        Include example answers for students
+      </Label>
+    </div>
+    <p className="text-sm text-muted-foreground">
+      {includeExamples 
+        ? "Students will see example answers" 
+        : "Examples will be hidden from students"}
+    </p>
+  </div>
+  
+  {/* Questions Section */}
+  <div className="space-y-4">
+    <div className="flex justify-between items-center">
+      <Label className="text-lg font-medium">Questions</Label>
+      <div className="flex gap-2">
+        {!useTemplate && topic !== "Custom" && (
+          <Button type="button" variant="outline" size="sm" onClick={handleResetToTemplate}>
+            Reset to Template
+          </Button>
+        )}
+        <Button type="button" variant="outline" size="sm" onClick={handleAddQuestion}>
+          <Plus size={16} className="mr-2" />
+          Add Question
+        </Button>
+      </div>
+    </div>
+    
+    {/* Individual Questions */}
+    <div className="space-y-6">
+      {questionsWithExamples.map((item, index) => (
+        <div key={index} className="border rounded-md p-4 bg-card">
+          <div className="flex gap-3 items-start">
+            <div className="flex-grow space-y-4">
+              {/* Question input and time limit in a responsive layout */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div className="md:col-span-3">
+                  <Label htmlFor={`question-${index}`} className="mb-2 block">
+                    Question {index + 1}
+                  </Label>
+                  <Textarea
+                    id={`question-${index}`}
+                    value={item.question}
+                    onChange={(e) => handleQuestionChange(index, e.target.value)}
+                    placeholder="Enter your question"
+                    className="resize-none"
+                    rows={2}
+                  />
                 </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="dueDate">Due Date</Label>
-                    <Input
-                      id="dueDate"
-                      type="date"
-                      value={dueDate}
-                      onChange={(e) => setDueDate(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                      required
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <Switch 
-                        id="includeExamples" 
-                        checked={includeExamples} 
-                        onCheckedChange={setIncludeExamples} 
-                      />
-                      <Label htmlFor="includeExamples">
-                        Include example answers for students
-                      </Label>
-                    </div>
-                  </div>
+                <div>
+                  <Label htmlFor={`timeLimit-${index}`} className="mb-2 block">
+                    Time Limit
+                  </Label>
+                  <Select
+                    value={item.timeLimit}
+                    onValueChange={(value) => handleTimeLimitChange(index, value)}
+                  >
+                    <SelectTrigger id={`timeLimit-${index}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIME_LIMITS.map((time) => (
+                        <SelectItem key={time} value={time}>
+                          {formatTimeDisplay(time)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <Label>Questions</Label>
-                    <div className="flex gap-2">
-                      {!useTemplate && topic !== "Custom" && (
-                        <Button type="button" variant="outline" size="sm" onClick={handleResetToTemplate}>
-                          Reset to Template
-                        </Button>
-                      )}
-                      <Button type="button" variant="outline" size="sm" onClick={handleAddQuestion}>
-                        <Plus size={16} className="mr-2" />
-                        Add Question
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    {questionsWithExamples.map((item, index) => (
-                      <Accordion 
-                        key={index} 
-                        type="single" 
-                        collapsible 
-                        className="border rounded-md"
-                      >
-                        <AccordionItem value={`question-${index}`} className="border-none">
-                          <div className="flex gap-2 p-2">
-                            <div className="flex-grow">
-                              <div className="flex gap-2 mb-2">
-                                <div className="flex-grow">
-                                  <Textarea
-                                    value={item.question}
-                                    onChange={(e) => handleQuestionChange(index, e.target.value)}
-                                    placeholder={`Question ${index + 1}`}
-                                    className="resize-none"
-                                    rows={2}
-                                  />
-                                </div>
-                                <div className="flex-shrink-0 w-40">
-                                  <Label htmlFor={`timeLimit-${index}`} className="text-sm mb-1 block">
-                                    Time Limit
-                                  </Label>
-                                  <Select
-                                    value={item.timeLimit}
-                                    onValueChange={(value) => handleTimeLimitChange(index, value)}
-                                  >
-                                    <SelectTrigger id={`timeLimit-${index}`} className="w-full">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {TIME_LIMITS.map((time) => (
-                                        <SelectItem key={time} value={time}>
-                                          {formatTimeDisplay(time)}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              </div>
-                              
-                              <AccordionTrigger className="py-1">
-                                {includeExamples ? "Example Answer (Optional)" : "Example Answer (Hidden from Students)"}
-                              </AccordionTrigger>
-                              
-                              <AccordionContent>
-                                <Textarea
-                                  value={item.example}
-                                  onChange={(e) => handleExampleChange(index, e.target.value)}
-                                  placeholder="Provide a simple example answer that students can reference if needed"
-                                  className="resize-none mt-2"
-                                  rows={3}
-                                />
-                                <p className="text-sm text-muted-foreground mt-1">
-                                  {includeExamples ? 
-                                    "Students will have the option to view this example if they're stuck." :
-                                    "This example is for your reference only and won't be shown to students."}
-                                </p>
-                              </AccordionContent>
-                            </div>
-                            
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              onClick={() => handleRemoveQuestion(index)}
-                              disabled={questionsWithExamples.length === 1}
-                              className="h-10 self-start"
-                            >
-                              <Trash2 size={16} />
-                            </Button>
-                          </div>
-                        </AccordionItem>
-                      </Accordion>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
+              </div>
               
+              {/* Example answer accordion */}
+              <Accordion type="single" collapsible className="border rounded-md bg-background">
+                <AccordionItem value={`example-${index}`} className="border-none">
+                  <AccordionTrigger className="px-4 py-3">
+                    {includeExamples 
+                      ? "Example Answer (Optional)" 
+                      : "Example Answer (Hidden from Students)"}
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4 pb-4">
+                    <Textarea
+                      value={item.example}
+                      onChange={(e) => handleExampleChange(index, e.target.value)}
+                      placeholder="Provide a simple example answer that students can reference if needed"
+                      className="resize-none"
+                      rows={3}
+                    />
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {includeExamples 
+                        ? "Students will have the option to view this example if they're stuck." 
+                        : "This example is for your reference only and won't be shown to students."}
+                    </p>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </div>
+            
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => handleRemoveQuestion(index)}
+              disabled={questionsWithExamples.length === 1}
+              className="h-10 mt-8"
+            >
+              <Trash2 size={16} />
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</CardContent>
               <CardFooter className="flex justify-between">
                 <Button type="button" variant="outline" onClick={() => navigate(-1)}>
                   Cancel

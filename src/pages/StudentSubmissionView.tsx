@@ -12,6 +12,7 @@ import React, { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 // Voice Tutor Report Component
 // Voice Tutor Report Component
@@ -152,6 +153,42 @@ const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
   return null;
 };
 
+const ExpandableTranscript = ({ text }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isLongText = text.length > 100;
+  
+  return (
+    <div className="mb-6">
+      <h2 className="text-lg font-semibold mb-2">Transcript</h2>
+      <div className="bg-gray-50 p-4 rounded border">
+        <div className={`${!isExpanded && isLongText ? "max-h-32 overflow-hidden relative" : ""}`}>
+          <p className="text-gray-800 whitespace-pre-wrap">{text}</p>
+          
+          {!isExpanded && isLongText && (
+            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-gray-50 to-transparent"></div>
+          )}
+        </div>
+        
+        {isLongText && (
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="mt-2 flex items-center text-blue-600 hover:text-blue-800 text-sm font-medium"
+          >
+            {isExpanded ? (
+              <>
+                <ChevronUp size={16} className="mr-1" /> Show Less
+              </>
+            ) : (
+              <>
+                <ChevronDown size={16} className="mr-1" /> Show Full Transcript
+              </>
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisReport; studentName?: string }) => {
 
@@ -335,12 +372,7 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
       )}
 
       {/* Transcript */}
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold mb-2">Transcript</h2>
-        <div className="bg-gray-50 p-4 rounded border">
-          <p className="text-gray-800">{analysis.transcript}</p>
-        </div>
-      </div>
+      <ExpandableTranscript text={analysis.transcript} />
 
       {/* Analysis Tabs */}
       <div className="mb-6">
