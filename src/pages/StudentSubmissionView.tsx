@@ -1,5 +1,5 @@
 import { useAuth } from "@/context/AuthContext";
-
+import posthog from 'posthog-js';
 import { useParams, useNavigate } from "react-router-dom";
 import { useClass } from "@/context/ClassContext";
 import { Button } from "@/components/ui/button";
@@ -160,7 +160,30 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
   const [activeAnalysisIndex, setActiveAnalysisIndex] = useState(0);
   const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
   const [activeTab, setActiveTab] = useState("fluency");
+  const [tabStartTime, setTabStartTime] = useState(Date.now());
+  useEffect(() => {
+    return () => {
+      const finalTimeSpent = Math.floor((Date.now() - tabStartTime) / 1000);
+      posthog.capture('voice_tutor_tab_time_spent', {
+        tab: activeTab,
+        seconds: finalTimeSpent,
+      });
+    };
+  }, []);
+  const handleTabChange = (tab: string) => {
+    const now = Date.now();
+    const timeSpent = Math.floor((now - tabStartTime) / 1000);
+    
+    posthog.capture('voice_tutor_tab_time_spent', {
+      tab: activeTab,
+      seconds: timeSpent,
+    });
+  
+    setActiveTab(tab);
+    setTabStartTime(now);
+  };
 
+  
   // Helper function to format date
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -324,7 +347,7 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
         <div className="border-b border-gray-200">
           <nav className="flex space-x-8">
             <button
-              onClick={() => setActiveTab("fluency")}
+              onClick={() => handleTabChange("fluency")}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === "fluency"
                   ? "border-blue-500 text-blue-600"
@@ -334,7 +357,7 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
               Fluency & Coherence
             </button>
             <button
-              onClick={() => setActiveTab("vocabulary")}
+              onClick={() => handleTabChange("vocabulary")}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === "vocabulary"
                   ? "border-blue-500 text-blue-600"
@@ -342,9 +365,10 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
               }`}
             >
               Lexical Resource
+              
             </button>
             <button
-              onClick={() => setActiveTab("grammar")}
+              onClick={() => handleTabChange("grammar")}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === "grammar"
                   ? "border-blue-500 text-blue-600"
@@ -354,7 +378,7 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
               Grammatical Range & Accuracy
             </button>
             <button
-              onClick={() => setActiveTab("pronunciation")}
+              onClick={() => handleTabChange("pronunciation")}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === "pronunciation"
                   ? "border-blue-500 text-blue-600"

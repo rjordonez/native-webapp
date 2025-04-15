@@ -1,3 +1,8 @@
+import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import posthog from "posthog-js";
+import { PostHogProvider } from "posthog-js/react";
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -49,7 +54,15 @@ const ProtectedRoute = ({
 
   return <>{children}</>;
 };
+const PostHogCaptureWrapper = ({ children }: { children: React.ReactNode }) => {
+  const location = useLocation();
 
+  useEffect(() => {
+    posthog.capture('$pageview');
+  }, [location.pathname]);
+
+  return <>{children}</>;
+};
 const AppRoutes = () => {
   const { user } = useAuth();
   
@@ -151,20 +164,43 @@ const AppRoutes = () => {
   );
 };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <AuthProvider>
-        <ClassProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </ClassProvider>
-      </AuthProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  useEffect(() => {
+    posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_KEY as string, {
+      api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
+      person_profiles: 'identified_only',
+      session_recording: {
+        maskAllInputs: true,
+        recordCrossOriginIframes: true,
+        captureCanvas: {
+          recordCanvas: true
+        }
+      }, 
+      loaded: (ph) => {
+        if (import.meta.env.DEV) ph.debug()
+      }
+    })
+    
+  }, []);
 
+  return (
+    <PostHogProvider client={posthog}>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <AuthProvider>
+            <ClassProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <PostHogCaptureWrapper>
+                  <AppRoutes />
+                </PostHogCaptureWrapper>
+              </BrowserRouter>
+            </ClassProvider>
+          </AuthProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </PostHogProvider>
+  );
+};
 export default App;
