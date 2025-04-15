@@ -1,3 +1,5 @@
+import { useAuth } from "@/context/AuthContext";
+
 import { useParams, useNavigate } from "react-router-dom";
 import { useClass } from "@/context/ClassContext";
 import { Button } from "@/components/ui/button";
@@ -70,7 +72,17 @@ interface PronunciationAnalysis {
   improvement_suggestion: string;
   url: string;
 }
+interface LexicalResource {
+  original_phrase: string;
+  suggested_phrase: string;
+  explanation: string;
+  resource_type: string;
+}
 
+interface SentenceLexical {
+  original: string;
+  suggestions: LexicalResource[];
+}
 // fluency and coherence
 interface FluencyMetrics {
   speech_rate: number;
@@ -119,8 +131,10 @@ interface AnalysisReport {
   pronunciation_analysis: PronunciationAnalysis[];
   grammar_analysis: Record<string, SentenceCorrection>;
   vocabulary_suggestions: Record<string, SentenceVocab>;
+  lexical_resources?: Record<string, SentenceLexical>;  // Add this line (with optional ? since old reports might not have it)
   fluency_coherence_analysis?: Record<string, FluencyCoherenceAnalysis>;
 }
+
 
 
 // Custom tooltip for RadarChart
@@ -139,11 +153,13 @@ const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
 };
 
 
-const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
+const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisReport; studentName?: string }) => {
+
+  
+
   const [activeAnalysisIndex, setActiveAnalysisIndex] = useState(0);
   const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
-  const [activeTab, setActiveTab] = useState("pronunciation"); // Added tab state
-  
+  const [activeTab, setActiveTab] = useState("fluency");
 
   // Helper function to format date
   const formatDate = (dateString: string) => {
@@ -240,13 +256,13 @@ const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
     };
   };
 
+
   return (
     <div className="bg-white shadow rounded-lg p-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="border-b pb-4 mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Voice Analysis Report</h1>
+        <h1 className="text-2xl font-bold text-gray-800">{studentName}'s Analysis Report</h1>
         <div className="flex justify-between mt-2">
-          <p className="text-gray-500">Submission ID: {report.submission_id}</p>
           <p className="text-gray-500">Date: {formatDate(report.timestamp)}</p>
         </div>
         <div className="mt-2 flex items-center">
@@ -309,37 +325,6 @@ const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
         <div className="border-b border-gray-200">
           <nav className="flex space-x-8">
             <button
-              onClick={() => setActiveTab("pronunciation")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "pronunciation"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              Pronunciation
-            </button>
-            <button
-              onClick={() => setActiveTab("grammar")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "grammar"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              Grammar
-            </button>
-            <button
-              onClick={() => setActiveTab("vocabulary")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "vocabulary"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              Vocabulary
-            </button>
-
-            <button
               onClick={() => setActiveTab("fluency")}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === "fluency"
@@ -349,7 +334,36 @@ const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
             >
               Fluency & Coherence
             </button>
-
+            <button
+              onClick={() => setActiveTab("vocabulary")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "vocabulary"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Lexical Resource
+            </button>
+            <button
+              onClick={() => setActiveTab("grammar")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "grammar"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Grammatical Range & Accuracy
+            </button>
+            <button
+              onClick={() => setActiveTab("pronunciation")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "pronunciation"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Pronunciation
+            </button>
           </nav>
         </div>
       </div>
@@ -507,64 +521,139 @@ const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
 
       {/* Vocabulary Analysis Tab */}
       {activeTab === "vocabulary" && (
-        <div>
-          <h2 className="text-lg font-semibold mb-2">Vocabulary Enhancement</h2>
-          {Object.keys(vocabSuggestions).length > 0 ? (
-            <div className="space-y-6">
-              {Object.entries(vocabSuggestions).map(([key, sentenceVocab], index) => {
-                // Type assertion to tell TypeScript this is a SentenceVocab
-                const suggestion = sentenceVocab as SentenceVocab;
-                return (
-                  <div key={index} className="bg-white p-4 border rounded-lg shadow-sm">
-                    <h3 className="font-medium text-gray-800 mb-2">
-                      Sentence {key.split('_')[1]}
-                    </h3>
-                    <div className="mb-2">
-                      <p className="text-sm text-gray-500">Original:</p>
-                      <p className="bg-gray-50 p-2 rounded">{suggestion.original}</p>
+  <div>
+    <h2 className="text-lg font-semibold mb-2">Vocabulary Enhancement</h2>
+    
+    {/* Vocabulary Suggestions Section */}
+    {Object.keys(vocabSuggestions).length > 0 ? (
+      <div className="space-y-6 mb-8">
+        <h3 className="text-md font-medium text-gray-700 border-b pb-2">Word Choices</h3>
+        {Object.entries(vocabSuggestions).map(([key, sentenceVocab], index) => {
+          // Type assertion to tell TypeScript this is a SentenceVocab
+          const suggestion = sentenceVocab as SentenceVocab;
+          return (
+            <div key={index} className="bg-white p-4 border rounded-lg shadow-sm">
+              <h3 className="font-medium text-gray-800 mb-2">
+                Sentence {key.split('_')[1]}
+              </h3>
+              <div className="mb-2">
+                <p className="text-sm text-gray-500">Original:</p>
+                <p className="bg-gray-50 p-2 rounded">{suggestion.original}</p>
+              </div>
+              <div className="space-y-3">
+                {suggestion.suggestions.map((vocab, idx) => (
+                  <div key={idx} className="border-l-4 border-blue-400 pl-3">
+                    <div className="flex items-start">
+                      <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
+                        {vocab.level} Level
+                      </span>
                     </div>
-                    <div className="space-y-3">
-                      {suggestion.suggestions.map((vocab, idx) => (
-                        <div key={idx} className="border-l-4 border-blue-400 pl-3">
-                          <div className="flex items-start">
-                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
-                              {vocab.level} Level
+                    <div className="mt-2 space-y-2">
+                      <div>
+                        <p className="text-sm text-gray-500">Basic Word:</p>
+                        <p className="font-medium">"{vocab.original_word}"</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Context:</p>
+                        <p className="italic text-sm">"{vocab.context}"</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Advanced Alternatives:</p>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {vocab.advanced_alternatives.map((alt, altIdx) => (
+                            <span key={altIdx} className="px-2 py-1 bg-gray-100 rounded-full text-sm">
+                              {alt}
                             </span>
-                          </div>
-                          <div className="mt-2 space-y-2">
-                            <div>
-                              <p className="text-sm text-gray-500">Basic Word:</p>
-                              <p className="font-medium">"{vocab.original_word}"</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-500">Context:</p>
-                              <p className="italic text-sm">"{vocab.context}"</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-500">Advanced Alternatives:</p>
-                              <div className="flex flex-wrap gap-2 mt-1">
-                                {vocab.advanced_alternatives.map((alt, altIdx) => (
-                                  <span key={altIdx} className="px-2 py-1 bg-gray-100 rounded-full text-sm">
-                                    {alt}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
                     </div>
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          ) : (
-            <div className="bg-gray-50 p-4 rounded border">
-              <p className="text-gray-600">No vocabulary suggestions available.</p>
+          );
+        })}
+      </div>
+    ) : (
+      <div className="bg-gray-50 p-4 rounded border mb-6">
+        <p className="text-gray-600">No vocabulary suggestions available.</p>
+      </div>
+    )}
+    
+    {/* Lexical Resources Section */}
+    {report.lexical_resources && Object.keys(report.lexical_resources).length > 0 ? (
+      <div className="space-y-6">
+        <h3 className="text-md font-medium text-gray-700 border-b pb-2">Collocations & Idioms</h3>
+        {Object.entries(report.lexical_resources).map(([key, sentenceLexical], index) => {
+          // Type assertion to tell TypeScript this is a SentenceLexical
+          const lexical = sentenceLexical as SentenceLexical;
+          return (
+            <div key={index} className="bg-white p-4 border rounded-lg shadow-sm">
+              <h3 className="font-medium text-gray-800 mb-2">
+                Sentence {key.split('_')[1]}
+              </h3>
+              <div className="mb-2">
+                <p className="text-sm text-gray-500">Original:</p>
+                <p className="bg-gray-50 p-2 rounded">{lexical.original}</p>
+              </div>
+              <div className="space-y-3">
+                {lexical.suggestions.map((resource, idx) => {
+                  // Choose color based on resource type
+                  let borderColor = "border-purple-400";
+                  let bgColor = "bg-purple-100";
+                  let textColor = "text-purple-800";
+                  
+                  if (resource.resource_type === "collocation") {
+                    borderColor = "border-indigo-400";
+                    bgColor = "bg-indigo-100";
+                    textColor = "text-indigo-800";
+                  } else if (resource.resource_type === "idiom") {
+                    borderColor = "border-amber-400";
+                    bgColor = "bg-amber-100";
+                    textColor = "text-amber-800";
+                  } else if (resource.resource_type === "word usage") {
+                    borderColor = "border-emerald-400";
+                    bgColor = "bg-emerald-100";
+                    textColor = "text-emerald-800";
+                  }
+                  
+                  return (
+                    <div key={idx} className={`border-l-4 ${borderColor} pl-3`}>
+                      <div className="flex items-start">
+                        <span className={`${bgColor} ${textColor} px-2 py-1 rounded text-xs font-medium capitalize`}>
+                          {resource.resource_type}
+                        </span>
+                      </div>
+                      <div className="mt-2 space-y-2">
+                        <div>
+                          <p className="text-sm text-gray-500">Original Phrase:</p>
+                          <p className="bg-red-50 p-2 rounded text-sm">"{resource.original_phrase}"</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">Suggested Phrase:</p>
+                          <p className="bg-green-50 p-2 rounded text-sm">"{resource.suggested_phrase}"</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">Explanation:</p>
+                          <p className="text-sm">{resource.explanation}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          )}
-        </div>
-      )}
+          );
+        })}
+      </div>
+    ) : (
+      <div className="bg-gray-50 p-4 rounded border">
+        <p className="text-gray-600">No lexical resource analysis available.</p>
+      </div>
+    )}
+  </div>
+)}
 
       {/* Fluency & Coherence Tab */}
       {activeTab === "fluency" && (
@@ -698,11 +787,12 @@ const StudentSubmissionView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { assignments, submissions } = useClass();
+  const { profile } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisReport | null>(null);
 
   // Find the submission row by React Router param
   const submission = submissions.find((s) => s.id === id);
@@ -736,7 +826,7 @@ const StudentSubmissionView = () => {
 
   // When user clicks "Report," fetch the .json file using the submission_uid
   useEffect(() => {
-    let timeoutId = null;
+    let timeoutId: NodeJS.Timeout | null = null;
     
     const fetchAnalysisResult = async (retryCount = 0, maxRetries = 12) => {
       try {
@@ -785,7 +875,6 @@ const StudentSubmissionView = () => {
       setLoading(false);
     }
     
-    // Cleanup function to cancel any pending timeouts
     return () => {
       if (timeoutId) {
         console.log("Cleaning up - clearing scheduled fetch timeout");
@@ -931,7 +1020,7 @@ const StudentSubmissionView = () => {
     }
 
     // Pass the data to our VoiceTutorReport component
-    return <VoiceTutorReport data={analysisResult} />;
+    return <VoiceTutorReport data={analysisResult} studentName={profile?.name || "Student"} />;
   };
 
   // Loading placeholder for the initial load
@@ -1021,7 +1110,7 @@ const StudentSubmissionView = () => {
             View Submission
           </Button>
           <Button variant={showReport ? "default" : "outline"} onClick={() => setShowReport(true)}>
-            Pronunciation Report
+            Speaking Report
           </Button>
         </div>
 
