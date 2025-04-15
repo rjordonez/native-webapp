@@ -159,7 +159,7 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
 
   const [activeAnalysisIndex, setActiveAnalysisIndex] = useState(0);
   const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
-  const [activeTab, setActiveTab] = useState("pronunciation");
+  const [activeTab, setActiveTab] = useState("fluency");
 
   // Helper function to format date
   const formatDate = (dateString: string) => {
@@ -261,9 +261,8 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
     <div className="bg-white shadow rounded-lg p-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="border-b pb-4 mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Voice Analysis Report</h1>
+        <h1 className="text-2xl font-bold text-gray-800">{studentName}'s Analysis Report</h1>
         <div className="flex justify-between mt-2">
-          <p className="text-gray-500">{studentName}</p>
           <p className="text-gray-500">Date: {formatDate(report.timestamp)}</p>
         </div>
         <div className="mt-2 flex items-center">
@@ -326,24 +325,14 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
         <div className="border-b border-gray-200">
           <nav className="flex space-x-8">
             <button
-              onClick={() => setActiveTab("pronunciation")}
+              onClick={() => setActiveTab("fluency")}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "pronunciation"
+                activeTab === "fluency"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}
             >
-              Pronunciation
-            </button>
-            <button
-              onClick={() => setActiveTab("grammar")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "grammar"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              Grammar
+              Fluency & Coherence
             </button>
             <button
               onClick={() => setActiveTab("vocabulary")}
@@ -355,18 +344,26 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
             >
               Lexical Resource
             </button>
-
             <button
-              onClick={() => setActiveTab("fluency")}
+              onClick={() => setActiveTab("grammar")}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "fluency"
+                activeTab === "grammar"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}
             >
-              Fluency & Coherence
+              Grammatical Range & Accuracy
             </button>
-
+            <button
+              onClick={() => setActiveTab("pronunciation")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "pronunciation"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Pronunciation
+            </button>
           </nav>
         </div>
       </div>
