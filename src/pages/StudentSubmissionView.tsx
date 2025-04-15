@@ -1,3 +1,5 @@
+import { useAuth } from "@/context/AuthContext";
+
 import { useParams, useNavigate } from "react-router-dom";
 import { useClass } from "@/context/ClassContext";
 import { Button } from "@/components/ui/button";
@@ -134,6 +136,7 @@ interface AnalysisReport {
 }
 
 
+
 // Custom tooltip for RadarChart
 const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
@@ -150,11 +153,13 @@ const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
 };
 
 
-const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
+const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisReport; studentName?: string }) => {
+
+  
+
   const [activeAnalysisIndex, setActiveAnalysisIndex] = useState(0);
   const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
-  const [activeTab, setActiveTab] = useState("pronunciation"); // Added tab state
-  
+  const [activeTab, setActiveTab] = useState("pronunciation");
 
   // Helper function to format date
   const formatDate = (dateString: string) => {
@@ -251,13 +256,14 @@ const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
     };
   };
 
+
   return (
     <div className="bg-white shadow rounded-lg p-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="border-b pb-4 mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Voice Analysis Report</h1>
         <div className="flex justify-between mt-2">
-          <p className="text-gray-500">Submission ID: {report.submission_id}</p>
+          <p className="text-gray-500">{studentName}</p>
           <p className="text-gray-500">Date: {formatDate(report.timestamp)}</p>
         </div>
         <div className="mt-2 flex items-center">
@@ -784,11 +790,12 @@ const StudentSubmissionView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { assignments, submissions } = useClass();
+  const { profile } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisReport | null>(null);
 
   // Find the submission row by React Router param
   const submission = submissions.find((s) => s.id === id);
@@ -822,7 +829,7 @@ const StudentSubmissionView = () => {
 
   // When user clicks "Report," fetch the .json file using the submission_uid
   useEffect(() => {
-    let timeoutId = null;
+    let timeoutId: NodeJS.Timeout | null = null;
     
     const fetchAnalysisResult = async (retryCount = 0, maxRetries = 12) => {
       try {
@@ -871,7 +878,6 @@ const StudentSubmissionView = () => {
       setLoading(false);
     }
     
-    // Cleanup function to cancel any pending timeouts
     return () => {
       if (timeoutId) {
         console.log("Cleaning up - clearing scheduled fetch timeout");
@@ -1017,7 +1023,7 @@ const StudentSubmissionView = () => {
     }
 
     // Pass the data to our VoiceTutorReport component
-    return <VoiceTutorReport data={analysisResult} />;
+    return <VoiceTutorReport data={analysisResult} studentName={profile?.name || "Student"} />;
   };
 
   // Loading placeholder for the initial load
@@ -1107,7 +1113,7 @@ const StudentSubmissionView = () => {
             View Submission
           </Button>
           <Button variant={showReport ? "default" : "outline"} onClick={() => setShowReport(true)}>
-            Pronunciation Report
+            Speaking Report
           </Button>
         </div>
 
