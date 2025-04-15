@@ -20,6 +20,7 @@ export type Json =
             due_date: string | null
             topic: string | null
             created_by: string | null
+            metadata: Json | null  // Add this line
           }
           Insert: {
             id?: number
@@ -30,6 +31,7 @@ export type Json =
             due_date?: string | null
             topic?: string | null
             created_by?: string | null
+            metadata?: Json | null  // Add this line
           }
           Update: {
             id?: number
@@ -40,6 +42,7 @@ export type Json =
             due_date?: string | null
             topic?: string | null
             created_by?: string | null
+            metadata?: Json | null  // Add this line
           }
           Relationships: [
             {
