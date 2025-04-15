@@ -467,56 +467,78 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
       {activeTab === "grammar" && (
         <div>
           <h2 className="text-lg font-semibold mb-2">Grammar Analysis</h2>
-          {Object.keys(grammarCorrections).length > 0 ? (
-            <div className="space-y-6">
-              {Object.entries(grammarCorrections).map(([key, sentenceCorrection], index) => {
-                // Type assertion to tell TypeScript this is a SentenceCorrection
-                const correction = sentenceCorrection as SentenceCorrection;
-                return (
-                  <div key={index} className="bg-white p-4 border rounded-lg shadow-sm">
-                    <h3 className="font-medium text-gray-800 mb-2">
-                      Sentence {key.split('_')[1]}
-                    </h3>
-                    <div className="mb-2">
-                      <p className="text-sm text-gray-500">Original:</p>
-                      <p className="bg-gray-50 p-2 rounded">{correction.original}</p>
-                    </div>
-                    <div className="space-y-3">
-                      {correction.corrections.map((corr, idx) => (
-                        <div key={idx} className="border-l-4 border-yellow-400 pl-3">
-                          <div className="flex items-start">
-                            <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-medium">
-                              Correction {idx + 1}
-                            </span>
-                          </div>
-                          <div className="mt-2 space-y-2">
-                            <div>
-                              <p className="text-sm text-gray-500">Issue:</p>
-                              <p className="bg-red-50 p-2 rounded text-sm">"{corr.original_phrase}"</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-500">Suggestion:</p>
-                              <p className="bg-green-50 p-2 rounded text-sm">"{corr.suggested_correction}"</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-500">Explanation:</p>
-                              <p className="text-sm">{corr.explanation}</p>
-                            </div>
-                          </div>
+          {(() => {
+            // Filter grammar corrections for the current question
+            const filteredGrammarCorrections = {};
+            
+            Object.entries(grammarCorrections).forEach(([key, correction]) => {
+              // Extract the recording number from the key (assuming keys are in format "sentence_X")
+              const [_, sentenceNum] = key.split('_');
+              const recordingNum = parseInt(sentenceNum) <= (activeAnalysisIndex + 1) * 10 && 
+                                  parseInt(sentenceNum) > activeAnalysisIndex * 10 
+                                  ? activeAnalysisIndex + 1 : null;
+                                  
+              if (recordingNum === activeAnalysisIndex + 1) {
+                filteredGrammarCorrections[key] = correction;
+              }
+            });
+            
+            if (Object.keys(filteredGrammarCorrections).length > 0) {
+              return (
+                <div className="space-y-6">
+                  {Object.entries(filteredGrammarCorrections).map(([key, sentenceCorrection], index) => {
+                  const correction = sentenceCorrection as SentenceCorrection;  
+                    return (
+                      <div key={index} className="bg-white p-4 border rounded-lg shadow-sm">
+                        <h3 className="font-medium text-gray-800 mb-2">
+                          Sentence {key.split('_')[1]}
+                        </h3>
+                        <div className="mb-2">
+                          <p className="text-sm text-gray-500">Original:</p>
+                          <p className="bg-gray-50 p-2 rounded">{correction.original}</p>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="bg-gray-50 p-4 rounded border">
-              <p className="text-gray-600">No grammar corrections available.</p>
-            </div>
-          )}
+                        <div className="space-y-3">
+                          {correction.corrections.map((corr, idx) => (
+                            <div key={idx} className="border-l-4 border-yellow-400 pl-3">
+                              <div className="flex items-start">
+                                <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-medium">
+                                  Correction {idx + 1}
+                                </span>
+                              </div>
+                              <div className="mt-2 space-y-2">
+                                <div>
+                                  <p className="text-sm text-gray-500">Issue:</p>
+                                  <p className="bg-red-50 p-2 rounded text-sm">"{corr.original_phrase}"</p>
+                                </div>
+                                <div>
+                                  <p className="text-sm text-gray-500">Suggestion:</p>
+                                  <p className="bg-green-50 p-2 rounded text-sm">"{corr.suggested_correction}"</p>
+                                </div>
+                                <div>
+                                  <p className="text-sm text-gray-500">Explanation:</p>
+                                  <p className="text-sm">{corr.explanation}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            } else {
+              return (
+                <div className="bg-gray-50 p-4 rounded border">
+                  <p className="text-gray-600">No grammar corrections available for this question.</p>
+                </div>
+              );
+            }
+          })()}
         </div>
       )}
+
+      
 
       {/* Vocabulary Analysis Tab */}
       {activeTab === "vocabulary" && (
@@ -524,133 +546,177 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
     <h2 className="text-lg font-semibold mb-2">Vocabulary Enhancement</h2>
     
     {/* Vocabulary Suggestions Section */}
-    {Object.keys(vocabSuggestions).length > 0 ? (
-      <div className="space-y-6 mb-8">
-        <h3 className="text-md font-medium text-gray-700 border-b pb-2">Word Choices</h3>
-        {Object.entries(vocabSuggestions).map(([key, sentenceVocab], index) => {
-          // Type assertion to tell TypeScript this is a SentenceVocab
-          const suggestion = sentenceVocab as SentenceVocab;
-          return (
-            <div key={index} className="bg-white p-4 border rounded-lg shadow-sm">
-              <h3 className="font-medium text-gray-800 mb-2">
-                Sentence {key.split('_')[1]}
-              </h3>
-              <div className="mb-2">
-                <p className="text-sm text-gray-500">Original:</p>
-                <p className="bg-gray-50 p-2 rounded">{suggestion.original}</p>
-              </div>
-              <div className="space-y-3">
-                {suggestion.suggestions.map((vocab, idx) => (
-                  <div key={idx} className="border-l-4 border-blue-400 pl-3">
-                    <div className="flex items-start">
-                      <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
-                        {vocab.level} Level
-                      </span>
-                    </div>
-                    <div className="mt-2 space-y-2">
-                      <div>
-                        <p className="text-sm text-gray-500">Basic Word:</p>
-                        <p className="font-medium">"{vocab.original_word}"</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Context:</p>
-                        <p className="italic text-sm">"{vocab.context}"</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Advanced Alternatives:</p>
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          {vocab.advanced_alternatives.map((alt, altIdx) => (
-                            <span key={altIdx} className="px-2 py-1 bg-gray-100 rounded-full text-sm">
-                              {alt}
-                            </span>
-                          ))}
+    {(() => {
+      // Filter vocabulary suggestions for the current question
+      const filteredVocabSuggestions = {};
+      
+      Object.entries(vocabSuggestions).forEach(([key, suggestion]) => {
+        // Extract the sentence number from the key
+        const [_, sentenceNum] = key.split('_');
+        const recordingNum = parseInt(sentenceNum) <= (activeAnalysisIndex + 1) * 10 && 
+                            parseInt(sentenceNum) > activeAnalysisIndex * 10 
+                            ? activeAnalysisIndex + 1 : null;
+                            
+        if (recordingNum === activeAnalysisIndex + 1) {
+          filteredVocabSuggestions[key] = suggestion;
+        }
+      });
+      
+      if (Object.keys(filteredVocabSuggestions).length > 0) {
+        return (
+          <div className="space-y-6 mb-8">
+            <h3 className="text-md font-medium text-gray-700 border-b pb-2">Word Choices</h3>
+            {Object.entries(filteredVocabSuggestions).map(([key, sentenceVocab], index) => {
+              // Type assertion to tell TypeScript this is a SentenceVocab
+              const suggestion = sentenceVocab as SentenceVocab;
+              return (
+                <div key={index} className="bg-white p-4 border rounded-lg shadow-sm">
+                  <h3 className="font-medium text-gray-800 mb-2">
+                    Sentence {key.split('_')[1]}
+                  </h3>
+                  <div className="mb-2">
+                    <p className="text-sm text-gray-500">Original:</p>
+                    <p className="bg-gray-50 p-2 rounded">{suggestion.original}</p>
+                  </div>
+                  <div className="space-y-3">
+                    {suggestion.suggestions.map((vocab, idx) => (
+                      <div key={idx} className="border-l-4 border-blue-400 pl-3">
+                        <div className="flex items-start">
+                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
+                            {vocab.level} Level
+                          </span>
+                        </div>
+                        <div className="mt-2 space-y-2">
+                          <div>
+                            <p className="text-sm text-gray-500">Basic Word:</p>
+                            <p className="font-medium">"{vocab.original_word}"</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Context:</p>
+                            <p className="italic text-sm">"{vocab.context}"</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Advanced Alternatives:</p>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {vocab.advanced_alternatives.map((alt, altIdx) => (
+                                <span key={altIdx} className="px-2 py-1 bg-gray-100 rounded-full text-sm">
+                                  {alt}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    ) : (
-      <div className="bg-gray-50 p-4 rounded border mb-6">
-        <p className="text-gray-600">No vocabulary suggestions available.</p>
-      </div>
-    )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      } else {
+        return (
+          <div className="bg-gray-50 p-4 rounded border mb-6">
+            <p className="text-gray-600">No vocabulary suggestions available for this question.</p>
+          </div>
+        );
+      }
+    })()}
     
     {/* Lexical Resources Section */}
-    {report.lexical_resources && Object.keys(report.lexical_resources).length > 0 ? (
-      <div className="space-y-6">
-        <h3 className="text-md font-medium text-gray-700 border-b pb-2">Collocations & Idioms</h3>
-        {Object.entries(report.lexical_resources).map(([key, sentenceLexical], index) => {
-          // Type assertion to tell TypeScript this is a SentenceLexical
-          const lexical = sentenceLexical as SentenceLexical;
-          return (
-            <div key={index} className="bg-white p-4 border rounded-lg shadow-sm">
-              <h3 className="font-medium text-gray-800 mb-2">
-                Sentence {key.split('_')[1]}
-              </h3>
-              <div className="mb-2">
-                <p className="text-sm text-gray-500">Original:</p>
-                <p className="bg-gray-50 p-2 rounded">{lexical.original}</p>
-              </div>
-              <div className="space-y-3">
-                {lexical.suggestions.map((resource, idx) => {
-                  // Choose color based on resource type
-                  let borderColor = "border-purple-400";
-                  let bgColor = "bg-purple-100";
-                  let textColor = "text-purple-800";
-                  
-                  if (resource.resource_type === "collocation") {
-                    borderColor = "border-indigo-400";
-                    bgColor = "bg-indigo-100";
-                    textColor = "text-indigo-800";
-                  } else if (resource.resource_type === "idiom") {
-                    borderColor = "border-amber-400";
-                    bgColor = "bg-amber-100";
-                    textColor = "text-amber-800";
-                  } else if (resource.resource_type === "word usage") {
-                    borderColor = "border-emerald-400";
-                    bgColor = "bg-emerald-100";
-                    textColor = "text-emerald-800";
-                  }
-                  
-                  return (
-                    <div key={idx} className={`border-l-4 ${borderColor} pl-3`}>
-                      <div className="flex items-start">
-                        <span className={`${bgColor} ${textColor} px-2 py-1 rounded text-xs font-medium capitalize`}>
-                          {resource.resource_type}
-                        </span>
-                      </div>
-                      <div className="mt-2 space-y-2">
-                        <div>
-                          <p className="text-sm text-gray-500">Original Phrase:</p>
-                          <p className="bg-red-50 p-2 rounded text-sm">"{resource.original_phrase}"</p>
+    {(() => {
+      if (!report.lexical_resources) return null;
+      
+      // Filter lexical resources for the current question
+      const filteredLexicalResources = {};
+      
+      Object.entries(report.lexical_resources).forEach(([key, resource]) => {
+        // Extract the sentence number from the key
+        const [_, sentenceNum] = key.split('_');
+        const recordingNum = parseInt(sentenceNum) <= (activeAnalysisIndex + 1) * 10 && 
+                            parseInt(sentenceNum) > activeAnalysisIndex * 10 
+                            ? activeAnalysisIndex + 1 : null;
+                            
+        if (recordingNum === activeAnalysisIndex + 1) {
+          filteredLexicalResources[key] = resource;
+        }
+      });
+      
+      if (Object.keys(filteredLexicalResources).length > 0) {
+        return (
+          <div className="space-y-6">
+            <h3 className="text-md font-medium text-gray-700 border-b pb-2">Collocations & Idioms</h3>
+            {Object.entries(filteredLexicalResources).map(([key, sentenceLexical], index) => {
+              // Type assertion to tell TypeScript this is a SentenceLexical
+              const lexical = sentenceLexical as SentenceLexical;
+              return (
+                <div key={index} className="bg-white p-4 border rounded-lg shadow-sm">
+                  <h3 className="font-medium text-gray-800 mb-2">
+                    Sentence {key.split('_')[1]}
+                  </h3>
+                  <div className="mb-2">
+                    <p className="text-sm text-gray-500">Original:</p>
+                    <p className="bg-gray-50 p-2 rounded">{lexical.original}</p>
+                  </div>
+                  <div className="space-y-3">
+                    {lexical.suggestions.map((resource, idx) => {
+                      // Choose color based on resource type
+                      let borderColor = "border-purple-400";
+                      let bgColor = "bg-purple-100";
+                      let textColor = "text-purple-800";
+                      
+                      if (resource.resource_type === "collocation") {
+                        borderColor = "border-indigo-400";
+                        bgColor = "bg-indigo-100";
+                        textColor = "text-indigo-800";
+                      } else if (resource.resource_type === "idiom") {
+                        borderColor = "border-amber-400";
+                        bgColor = "bg-amber-100";
+                        textColor = "text-amber-800";
+                      } else if (resource.resource_type === "word usage") {
+                        borderColor = "border-emerald-400";
+                        bgColor = "bg-emerald-100";
+                        textColor = "text-emerald-800";
+                      }
+                      
+                      return (
+                        <div key={idx} className={`border-l-4 ${borderColor} pl-3`}>
+                          <div className="flex items-start">
+                            <span className={`${bgColor} ${textColor} px-2 py-1 rounded text-xs font-medium capitalize`}>
+                              {resource.resource_type}
+                            </span>
+                          </div>
+                          <div className="mt-2 space-y-2">
+                            <div>
+                              <p className="text-sm text-gray-500">Original Phrase:</p>
+                              <p className="bg-red-50 p-2 rounded text-sm">"{resource.original_phrase}"</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-500">Suggested Phrase:</p>
+                              <p className="bg-green-50 p-2 rounded text-sm">"{resource.suggested_phrase}"</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-500">Explanation:</p>
+                              <p className="text-sm">{resource.explanation}</p>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm text-gray-500">Suggested Phrase:</p>
-                          <p className="bg-green-50 p-2 rounded text-sm">"{resource.suggested_phrase}"</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-500">Explanation:</p>
-                          <p className="text-sm">{resource.explanation}</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    ) : (
-      <div className="bg-gray-50 p-4 rounded border">
-        <p className="text-gray-600">No lexical resource analysis available.</p>
-      </div>
-    )}
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      } else {
+        return (
+          <div className="bg-gray-50 p-4 rounded border">
+            <p className="text-gray-600">No lexical resource analysis available for this question.</p>
+          </div>
+        );
+      }
+    })()}
   </div>
 )}
 
@@ -780,6 +846,9 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
     </div>
   );
 };
+
+
+
 
 
 const StudentSubmissionView = () => {
