@@ -67,6 +67,7 @@ const StudentAssignmentDetails = () => {
   const [questionTimeLimits, setQuestionTimeLimits] = useState<number[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
+  const [questionExamples, setQuestionExamples] = useState<string[]>([]);
   
   const assignment = useMemo(() => assignments.find(a => a.id === id), [assignments, id]);
   const classes = useMemo(() => getClassesByUser(), [getClassesByUser]);
@@ -89,8 +90,11 @@ const StudentAssignmentDetails = () => {
           const timeLimits = metadata.questionsWithTimeLimits.map(q => 
             parseInt(q.timeLimit, 10) || DEFAULT_RECORDING_SECONDS
           );
+          // Extract examples for each question
+          const examples = metadata.questionsWithTimeLimits.map(q => q.example || "");
           
           setQuestionTimeLimits(timeLimits);
+          setQuestionExamples(examples);  // <<=== NEW: set examples from metadata
           
           // Set initial time limit for the first question
           if (timeLimits.length > 0) {
@@ -104,7 +108,7 @@ const StudentAssignmentDetails = () => {
       }
     } catch (error) {
       console.error("Error parsing assignment metadata:", error);
-      // Fallback to default time limit
+      // Fallback to default time limits if parsing fails
       setQuestionTimeLimits(assignment.questions.map(() => DEFAULT_RECORDING_SECONDS));
       setTimeLeft(DEFAULT_RECORDING_SECONDS);
     }
@@ -122,32 +126,16 @@ const StudentAssignmentDetails = () => {
     currentSubmission?.answers.map(answer => answer.audioUrl || "") || [],
     [currentSubmission]
   );
-  
   // Parse the question to extract the question text and example
   const currentQuestionData = useMemo(() => {
     if (!assignment || !assignment.questions[currentQuestionIndex]) return { question: "", example: "" };
     
-    const questionText = assignment.questions[currentQuestionIndex];
-    
-    try {
-      // Check if the question is in JSON format containing an example
-      if (questionText.startsWith('{') && questionText.includes('"question"') && questionText.includes('"example"')) {
-        const parsed = JSON.parse(questionText) as QuestionWithExample;
-        return {
-          question: parsed.question || "",
-          example: parsed.example || ""
-        };
-      }
-    } catch (e) {
-      console.error("Error parsing question JSON:", e);
-    }
-    
-    // If not JSON or parsing failed, return the original text as the question
     return { 
-      question: questionText,
-      example: ""
+      question: assignment.questions[currentQuestionIndex],
+      example: questionExamples[currentQuestionIndex] || ""
     };
-  }, [assignment, currentQuestionIndex]);
+  }, [assignment, currentQuestionIndex, questionExamples]);
+
 
   // Check if the current question has an example
   const hasExample = useMemo(() => {
@@ -546,85 +534,88 @@ const StudentAssignmentDetails = () => {
         </div>
         
         <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex justify-between items-center">
-              <span>Question {currentQuestionIndex + 1} of {assignment.questions.length}</span>
-              {hasExample && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setShowExampleDialog(true)}
-                  className="text-blue-500 hover:text-blue-600"
-                >
-                  <HelpCircle className="h-4 w-4 mr-1" /> View Example
-                </Button>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-lg">{currentQuestionData.question}</p>
-            
-            <div className="bg-muted/40 rounded-lg p-6 flex flex-col items-center">
-              {audioUrls[currentQuestionIndex] && !isRecording ? (
-                <div className="w-full">
-                  <div className="mb-4 text-center text-green-600 font-medium flex items-center justify-center">
-                    <Check className="mr-2 h-5 w-5" />
-                    Recording Complete
-                  </div>
-                  <audio 
-                    src={audioUrls[currentQuestionIndex]} 
-                    controls 
-                    className="w-full" 
-                  />
-                  <div className="mt-4 text-center">
-                    <Button 
-                      onClick={toggleRecording}
-                      disabled={isUploading}
-                    >
-                      {isUploading ? "Processing..." : "Record Again"}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center">
-                  <div className="mb-4">
-                    <Button
-                      size="lg"
-                      className={`rounded-full p-8 ${isRecording ? "bg-red-500 hover:bg-red-600" : ""}`}
-                      // Disable stop if uploading OR if minimum time hasn't passed
-                      disabled={isUploading || (isRecording && isStopDisabled)} 
-                      onClick={toggleRecording}
-                      title={isRecording && isStopDisabled ? `Cannot stop for ${MINIMUM_RECORDING_SECONDS} seconds` : (isRecording ? "Stop Recording" : "Start Recording")} // Add tooltip
-                    >
-                      {isRecording ? (
-                        <Square className="h-8 w-8" />
-                      ) : (
-                        <Mic className="h-8 w-8" />
-                      )}
-                    </Button>
-                  </div>
-                  
-                  {isRecording ? (
-                    <>
-                      <div className="text-lg font-semibold mb-2">
-                        Recording: {formatTimeDisplay(timeLeft)} left
-                      </div>
-                      {/* Show message only when stop is actually disabled */}
-                      {isStopDisabled && ( 
-                        <div className="text-sm text-blue-500">
-                          Minimum recording time: {MINIMUM_RECORDING_SECONDS} seconds (cannot stop yet)
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="text-muted-foreground">
-                      {isUploading ? "Processing..." : `Click to start recording (${formatTimeDisplay(timeLeft)} max)`}
-                    </div>
-                  )}
-                </div>
-              )}
+        <CardTitle className="w-full px-6 pt-6 flex items-center">
+  <span>Question {currentQuestionIndex + 1} of {assignment.questions.length}</span>
+</CardTitle>
+          <CardContent className="flex flex-col gap-8 p-6"> {/* Added flex-col, gap-8 and p-6 for extra spacing and padding */}
+  {/* Cue Card: Render if an example exists */}
+  {hasExample ? (
+    <div className="border p-6 rounded-lg bg-muted/40 text-left"> {/* Added text-left and p-6 */}
+      <p className="text-lg font-semibold">{currentQuestionData.question}</p>
+      <div className="mt-4 text-sm text-gray-700"> {/* Increased margin-top (mt-4) for extra spacing */}
+        <span className="font-bold">Example Answer: </span>
+        <p>{currentExample}</p>
+      </div>
+    </div>
+  ) : (
+    <p className="text-lg">{currentQuestionData.question}</p>
+  )}
+
+  {/* Recording UI */}
+  <div className="bg-muted/40 rounded-lg p-6 flex flex-col items-center">
+    {audioUrls[currentQuestionIndex] && !isRecording ? (
+      <div className="w-full">
+        <div className="mb-4 text-center text-green-600 font-medium flex items-center justify-center">
+          <Check className="mr-2 h-5 w-5" />
+          Recording Complete
+        </div>
+        <audio 
+          src={audioUrls[currentQuestionIndex]} 
+          controls 
+          className="w-full" 
+        />
+        <div className="mt-4 text-center">
+          <Button 
+            onClick={toggleRecording}
+            disabled={isUploading}
+          >
+            {isUploading ? "Processing..." : "Record Again"}
+          </Button>
+        </div>
+      </div>
+    ) : (
+      <div className="text-center">
+        <div className="mb-4">
+          <Button
+            size="lg"
+            className={`rounded-full p-8 ${isRecording ? "bg-red-500 hover:bg-red-600" : ""}`}
+            disabled={isUploading || (isRecording && isStopDisabled)}
+            onClick={toggleRecording}
+            title={
+              isRecording && isStopDisabled 
+                ? `Cannot stop for ${MINIMUM_RECORDING_SECONDS} seconds` 
+                : (isRecording ? "Stop Recording" : "Start Recording")
+            }
+          >
+            {isRecording ? (
+              <Square className="h-8 w-8" />
+            ) : (
+              <Mic className="h-8 w-8" />
+            )}
+          </Button>
+        </div>
+        
+        {isRecording ? (
+          <>
+            <div className="text-lg font-semibold mb-2">
+              Recording: {formatTimeDisplay(timeLeft)} left
             </div>
-          </CardContent>
+            {isStopDisabled && ( 
+              <div className="text-sm text-blue-500">
+                Minimum recording time: {MINIMUM_RECORDING_SECONDS} seconds (cannot stop yet)
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="text-muted-foreground">
+            {isUploading ? "Processing..." : `Click to start recording (${formatTimeDisplay(timeLeft)} max)`}
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+</CardContent>
+
           <CardFooter className="flex justify-between">
             <Button 
               variant="outline" 
@@ -673,34 +664,7 @@ const StudentAssignmentDetails = () => {
           </div>
         </div>
 
-        {/* Example Dialog */}
-        <AlertDialog open={showExampleDialog} onOpenChange={setShowExampleDialog}>
-          <AlertDialogContent className="max-w-md">
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex justify-between items-center">
-                <span>Example Answer</span>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-8 w-8 p-0" 
-                  onClick={() => setShowExampleDialog(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </AlertDialogTitle>
-              <AlertDialogDescription className="text-foreground">
-                <div className="mt-2 text-sm bg-muted/30 p-4 rounded-md">
-                  {currentExample}
-                </div>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogAction onClick={() => setShowExampleDialog(false)}>
-                Got it
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+      
       </main>
     </div>
   );
