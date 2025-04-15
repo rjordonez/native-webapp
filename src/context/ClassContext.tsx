@@ -24,7 +24,8 @@ interface ClassContextType {
     title: string,
     dueDate: string,
     topic: string,
-    questions: string[]
+    questions: string[],
+    metadata?: string  // Add this optional parameter
   ) => Promise<void>;
   getAssignmentsByClass: (classId: string) => Assignment[];
   getSubmissionsByAssignment: (assignmentId: string) => Submission[];
@@ -223,6 +224,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
           topic: a.topic || "",
           questions: a.questions,
           createdAt: a.created_at || new Date().toISOString(),
+          metadata: a.metadata || null,  // Add this field
         }));
         setAssignments(formatted);
         return formatted;
@@ -829,7 +831,8 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
     title: string,
     dueDate: string,
     topic: string,
-    questions: string[]
+    questions: string[],
+    metadata?: string  // Add this optional parameter
   ) => {
     if (!user || profile?.role !== "teacher") return;
     try {
@@ -842,11 +845,12 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
           due_date: dueDate,
           topic,
           created_by: user.id,
+          metadata: metadata || null,  // Add this field
         })
         .select()
         .single();
       if (error) throw error;
-
+  
       if (data) {
         setAssignments((prev) => [
           ...prev,
@@ -858,6 +862,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
             topic: data.topic || topic,
             questions: data.questions,
             createdAt: data.created_at || new Date().toISOString(),
+            metadata: data.metadata || null,  // Add this field
           },
         ]);
         toast.success("Assignment created successfully");

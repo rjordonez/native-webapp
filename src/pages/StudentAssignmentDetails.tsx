@@ -28,9 +28,20 @@ interface QuestionWithExample {
   example: string;
 }
 
+// Interface for parsed metadata
+interface QuestionWithTimeLimit {
+  question: string;
+  timeLimit: string;
+  example?: string;
+}
+
+interface AssignmentMetadata {
+  questionsWithTimeLimits: QuestionWithTimeLimit[];
+}
+
 // Define the minimum recording duration
 const MINIMUM_RECORDING_SECONDS = 5;
-const TOTAL_RECORDING_SECONDS = 40; // Use a constant for total time
+const DEFAULT_RECORDING_SECONDS = 60; // Default if no metadata exists
 
 const StudentAssignmentDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -47,12 +58,13 @@ const StudentAssignmentDetails = () => {
   
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(TOTAL_RECORDING_SECONDS);
+  const [timeLeft, setTimeLeft] = useState(DEFAULT_RECORDING_SECONDS);
   const [isUploading, setIsUploading] = useState(false);
   const [currentSubmission, setCurrentSubmission] = useState<Submission | undefined>();
   const [showExampleDialog, setShowExampleDialog] = useState(false);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null); // Track recording start time
   const [isStopDisabled, setIsStopDisabled] = useState(false); // Track if stop button is disabled by minimum time
+  const [questionTimeLimits, setQuestionTimeLimits] = useState<number[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
   
@@ -62,6 +74,48 @@ const StudentAssignmentDetails = () => {
     assignment ? classes.find(c => c.id === assignment.classId) : undefined,
     [assignment, classes]
   );
+
+  // Parse assignment metadata when assignment changes
+  useEffect(() => {
+    if (!assignment) return;
+    
+    try {
+      // Check if metadata exists
+      if (assignment.metadata) {
+        const metadata = JSON.parse(assignment.metadata) as AssignmentMetadata;
+        
+        if (metadata.questionsWithTimeLimits) {
+          // Extract time limits for each question
+          const timeLimits = metadata.questionsWithTimeLimits.map(q => 
+            parseInt(q.timeLimit, 10) || DEFAULT_RECORDING_SECONDS
+          );
+          
+          setQuestionTimeLimits(timeLimits);
+          
+          // Set initial time limit for the first question
+          if (timeLimits.length > 0) {
+            setTimeLeft(timeLimits[0]);
+          }
+        }
+      } else {
+        // If no metadata, set default time limits for all questions
+        setQuestionTimeLimits(assignment.questions.map(() => DEFAULT_RECORDING_SECONDS));
+        setTimeLeft(DEFAULT_RECORDING_SECONDS);
+      }
+    } catch (error) {
+      console.error("Error parsing assignment metadata:", error);
+      // Fallback to default time limit
+      setQuestionTimeLimits(assignment.questions.map(() => DEFAULT_RECORDING_SECONDS));
+      setTimeLeft(DEFAULT_RECORDING_SECONDS);
+    }
+  }, [assignment]);
+
+  // Update time limit when question changes
+  useEffect(() => {
+    if (questionTimeLimits.length > 0 && currentQuestionIndex < questionTimeLimits.length) {
+      setTimeLeft(questionTimeLimits[currentQuestionIndex]);
+    }
+  }, [currentQuestionIndex, questionTimeLimits]);
 
   // Derived state for audio URLs
   const audioUrls = useMemo(() => 
@@ -323,17 +377,17 @@ const StudentAssignmentDetails = () => {
       setRecordingStartTime(Date.now()); // Set start time
       setIsRecording(true);
       setIsStopDisabled(true); // Initially disable stop button
-      setTimeLeft(TOTAL_RECORDING_SECONDS); // Reset timer
+      // Do not reset timeLeft here, as it's set when question changes
       mediaRecorderRef.current.start(100); 
       toast.info(`Recording started. Minimum duration: ${MINIMUM_RECORDING_SECONDS} seconds.`);
     }
-  }, [isRecording, stopRecording, audioUrls, currentQuestionIndex, updateSubmission, setCurrentSubmission, setRecordingStartTime, setIsRecording, setIsStopDisabled, setTimeLeft]);
+  }, [isRecording, stopRecording, audioUrls, currentQuestionIndex, updateSubmission, setCurrentSubmission, setRecordingStartTime, setIsRecording, setIsStopDisabled]);
 
   const goToNextQuestion = useCallback(() => {
     if (assignment && currentQuestionIndex < assignment.questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setIsRecording(false);
-      setTimeLeft(TOTAL_RECORDING_SECONDS);
+      // Time limit will be updated in the useEffect that watches currentQuestionIndex
     }
   }, [assignment, currentQuestionIndex]);
 
@@ -341,7 +395,7 @@ const StudentAssignmentDetails = () => {
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
       setIsRecording(false);
-      setTimeLeft(TOTAL_RECORDING_SECONDS);
+      // Time limit will be updated in the useEffect that watches currentQuestionIndex
     }
   }, [currentQuestionIndex]);
 
@@ -411,6 +465,21 @@ const StudentAssignmentDetails = () => {
     const answeredCount = currentSubmission.answers.filter(a => a.audioUrl).length;
     return (answeredCount / assignment.questions.length) * 100;
   }, [currentSubmission, assignment]);
+
+  // Helper function to format time for display
+  const formatTimeDisplay = useCallback((seconds: number): string => {
+    if (seconds < 60) {
+      return `${seconds} seconds`;
+    } else if (seconds === 60) {
+      return `1 minute`;
+    } else if (seconds % 60 === 0) {
+      return `${seconds / 60} minutes`;
+    } else {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    }
+  }, []);
 
   if (loading || !assignment || !currentSubmission) {
     return (
@@ -538,7 +607,7 @@ const StudentAssignmentDetails = () => {
                   {isRecording ? (
                     <>
                       <div className="text-lg font-semibold mb-2">
-                        Recording: {timeLeft} seconds left
+                        Recording: {formatTimeDisplay(timeLeft)} left
                       </div>
                       {/* Show message only when stop is actually disabled */}
                       {isStopDisabled && ( 
@@ -549,7 +618,7 @@ const StudentAssignmentDetails = () => {
                     </>
                   ) : (
                     <div className="text-muted-foreground">
-                      {isUploading ? "Processing..." : "Click to start recording"}
+                      {isUploading ? "Processing..." : `Click to start recording (${formatTimeDisplay(timeLeft)} max)`}
                     </div>
                   )}
                 </div>
@@ -594,7 +663,7 @@ const StudentAssignmentDetails = () => {
                 onClick={() => {
                   setCurrentQuestionIndex(index);
                   setIsRecording(false);
-                  setTimeLeft(TOTAL_RECORDING_SECONDS);
+                  // Time limit will be updated in the useEffect
                 }}
                 disabled={isUploading}
               >
