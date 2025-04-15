@@ -422,7 +422,7 @@ const CreateAssignment = () => {
     );
       
     // Navigate back to class details
-    navigate(`/class/${classId}`);
+    navigate(`/teacher/class/${classId}`);
   };
 
   // Reset to template questions
