@@ -8,26 +8,26 @@ import { Calendar, Clock } from "lucide-react";
 import AppNavbar from "@/components/AppNavbar";
 import { formatDistanceToNow } from "date-fns";
 import { useCallback } from "react";
-
+import posthog from 'posthog-js';
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { 
-    getClassesByUser, 
-    getPendingAssignments, 
+  const {
+    getClassesByUser,
+    getPendingAssignments,
     getCompletedAssignments,
     submissions,
     loading,
     assignments
   } = useClass();
-  
+
   const classes = getClassesByUser();
   const pendingAssignments = getPendingAssignments(user?.id || '');
   const completedAssignments = getCompletedAssignments(user?.id || '');
 
   const getSubmissionStatus = useCallback((assignmentId: string) => {
-    const submission = submissions.find(s => 
-      s.assignmentId === assignmentId && 
+    const submission = submissions.find(s =>
+      s.assignmentId === assignmentId &&
       s.studentId === user?.id
     );
     return submission?.status || "not_started";
@@ -73,15 +73,20 @@ const StudentDashboard = () => {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Student Dashboard</h1>
           <div className="flex gap-4">
-            <Button>
-              <a href="https://speakingpractice.vercel.app" target="_blank" rel="noopener noreferrer">
-                IELTS Test
-              </a>
+            <Button
+              onClick={() => {
+                posthog.capture('clicked_ielts_test_button', {
+                  userId: user?.id,
+                });
+                window.open("https://speakingpractice.vercel.app", "_blank", "noopener,noreferrer");
+              }}
+            >
+              IELTS Test
             </Button>
             <Button onClick={() => navigate("/join-class")}>Join New Class</Button>
           </div>
         </div>
-        
+
         {classes.length === 0 ? (
           <div className="bg-muted/40 rounded-lg p-12 text-center">
             <h2 className="text-2xl font-medium mb-2">You haven't joined any classes yet</h2>
@@ -106,9 +111,9 @@ const StudentDashboard = () => {
                       </p>
                     </CardContent>
                     <CardFooter>
-                      <Button 
-                        variant="outline" 
-                        className="w-full" 
+                      <Button
+                        variant="outline"
+                        className="w-full"
                         onClick={() => navigate(`/student/class/${classItem.id}`)}
                       >
                         View Class
@@ -118,7 +123,7 @@ const StudentDashboard = () => {
                 ))}
               </div>
             </section>
-            
+
             {/* Pending assignments section */}
             <section>
               <h2 className="text-2xl font-semibold mb-4">Pending Assignments</h2>
@@ -129,7 +134,7 @@ const StudentDashboard = () => {
                   {pendingAssignments.map((assignment) => {
                     const classItem = classes.find(c => c.id === assignment.classId);
                     const status = getSubmissionStatus(assignment.id);
-                    
+
                     return (
                       <Card key={assignment.id} className="hover:shadow-md transition-shadow">
                         <CardHeader>
@@ -150,8 +155,8 @@ const StudentDashboard = () => {
                           </div>
                         </CardContent>
                         <CardFooter>
-                          <Button 
-                            className={`w-full ${status === "in_progress" ? "bg-amber-500 hover:bg-amber-600" : ""}`} 
+                          <Button
+                            className={`w-full ${status === "in_progress" ? "bg-amber-500 hover:bg-amber-600" : ""}`}
                             onClick={() => navigate(`/student/assignment/${assignment.id}`)}
                           >
                             {status === "in_progress" ? "Continue Assignment" : "Start Assignment"}
@@ -163,7 +168,7 @@ const StudentDashboard = () => {
                 </div>
               )}
             </section>
-            
+
             {/* Completed assignments section */}
             <section>
               <h2 className="text-2xl font-semibold mb-4">Completed Assignments</h2>
@@ -173,11 +178,11 @@ const StudentDashboard = () => {
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                   {completedAssignments.map((assignment) => {
                     const classItem = classes.find(c => c.id === assignment.classId);
-                    const submission = submissions.find(s => 
-                      s.assignmentId === assignment.id && 
+                    const submission = submissions.find(s =>
+                      s.assignmentId === assignment.id &&
                       s.studentId === user?.id
                     );
-                    
+
                     return (
                       <Card key={assignment.id} className="hover:shadow-md transition-shadow">
                         <CardHeader>
@@ -193,8 +198,8 @@ const StudentDashboard = () => {
                           <div className="flex items-center text-sm text-muted-foreground mb-2">
                             <Calendar className="mr-2 h-4 w-4" />
                             <span>
-                              Submitted {submission?.submittedAt ? 
-                                formatDistanceToNow(new Date(submission.submittedAt), { addSuffix: true }) : 
+                              Submitted {submission?.submittedAt ?
+                                formatDistanceToNow(new Date(submission.submittedAt), { addSuffix: true }) :
                                 'recently'}
                             </span>
                           </div>
@@ -205,7 +210,7 @@ const StudentDashboard = () => {
                           )}
                         </CardContent>
                         <CardFooter>
-                          <Button 
+                          <Button
                             className={`w-full ${!submission?.feedback?.reviewed ? "bg-green-500 hover:bg-green-600 text-white" : ""}`}
                             onClick={() => navigate(`/student/submission/${submission?.id}`)}
                           >
