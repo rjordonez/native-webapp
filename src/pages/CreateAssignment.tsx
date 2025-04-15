@@ -362,8 +362,8 @@ const CreateAssignment = () => {
       );
     }
     
-    // Navigate back to class details
-    navigate(`/class/${classId}`);
+    // Navigate back to teacher's class view
+    navigate(`/teacher/class/${classId}`);
   };
 
   // Reset to template questions

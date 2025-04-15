@@ -125,7 +125,7 @@ const ClassStudentsView = () => {
         <Button 
           variant="link" 
           className="px-0 mb-4 flex items-center" 
-          onClick={() => navigate(`/class/${id}`)}
+          onClick={() => navigate(`/teacher/class/${id}`)}
         >
           <ArrowLeft size={16} className="mr-1" /> Back to Class
         </Button>
