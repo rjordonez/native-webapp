@@ -29,6 +29,9 @@ interface AssignmentMetadata {
 const MINIMUM_RECORDING_SECONDS = 5;
 const DEFAULT_RECORDING_SECONDS = 60; // Default if no metadata exists
 
+
+
+
 const StudentAssignmentDetails = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -54,6 +57,7 @@ const StudentAssignmentDetails = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
   const [questionExamples, setQuestionExamples] = useState<string[]>([]);
+
   
   const assignment = useMemo(() => assignments.find(a => a.id === id), [assignments, id]);
   const classes = useMemo(() => getClassesByUser(), [getClassesByUser]);
@@ -61,6 +65,10 @@ const StudentAssignmentDetails = () => {
     assignment ? classes.find(c => c.id === assignment.classId) : undefined,
     [assignment, classes]
   );
+
+  const stoppedDueToTabSwitchRef = useRef(false);
+
+
 
   // Parse assignment metadata when assignment changes
   useEffect(() => {
@@ -123,6 +131,8 @@ const StudentAssignmentDetails = () => {
   }, [assignment, currentQuestionIndex, questionExamples]);
 
 
+  
+
   // Check if the current question has an example
   const hasExample = useMemo(() => {
     return !!(currentQuestionData.example && currentQuestionData.example.trim());
@@ -148,6 +158,24 @@ const StudentAssignmentDetails = () => {
     }
   }, [setIsRecording, setIsStopDisabled, setRecordingStartTime]); // Updated dependencies to include setters used
 
+
+  // Add this useEffect to handle visibility changes
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && isRecording) {
+        console.log("Tab switched while recording, setting flag");
+        stoppedDueToTabSwitchRef.current = true;
+        stopRecording();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isRecording, stopRecording]);
+  
   // Setup media recorder
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -167,6 +195,14 @@ const StudentAssignmentDetails = () => {
           // Reset start time and disabled status when stopped
           setRecordingStartTime(null);
           setIsStopDisabled(false); 
+
+          console.log("In handleStop, stoppedDueToTabSwitch is:", stoppedDueToTabSwitchRef.current);
+
+          if (stoppedDueToTabSwitchRef.current) {
+            console.log("Showing tab switch notification");
+            toast.info("Recording stopped because you switched tabs");
+            stoppedDueToTabSwitchRef.current = false;
+          }
 
           const chunks = recordedChunksRef.current;
           recordedChunksRef.current = []; 
