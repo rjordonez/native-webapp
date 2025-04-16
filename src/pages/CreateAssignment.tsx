@@ -13,8 +13,8 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Switch } from "@/components/ui/switch";
+import AutoBulletTextarea from "@/components/AutoBulletTextarea";// Question with example and time limit type
 
-// Question with example and time limit type
 interface QuestionWithExample {
   question: string;
   example: string;
@@ -620,31 +620,30 @@ const CreateAssignment = () => {
                   </Select>
                 </div>
               </div>
-              
               {/* Example answer accordion */}
               <Accordion type="single" collapsible className="border rounded-md bg-background">
-                <AccordionItem value={`example-${index}`} className="border-none">
-                  <AccordionTrigger className="px-4 py-3">
+              <AccordionItem value={`example-${index}`} className="border-none">
+                <AccordionTrigger className="px-4 py-3">
+                  {includeExamples 
+                    ? "Cue Card (Optional)" 
+                    : "Cue Card (Hidden from Students)"}
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4">
+                  {/* Replace this Textarea with AutoBulletTextarea */}
+                  <AutoBulletTextarea
+                    value={item.example}
+                    onChange={(value) => handleExampleChange(index, value)}
+                    placeholder="Use '-' at the beginning of a line to create bullet points"
+                    rows={3}
+                  />
+                  <p className="text-sm text-muted-foreground mt-2">
                     {includeExamples 
-                      ? "Cue Card (Optional)" 
-                      : "Cue Card (Hidden from Students)"}
-                  </AccordionTrigger>
-                  <AccordionContent className="px-4 pb-4">
-                    <Textarea
-                      value={item.example}
-                      onChange={(e) => handleExampleChange(index, e.target.value)}
-                      placeholder=""
-                      className="resize-none"
-                      rows={3}
-                    />
-                    <p className="text-sm text-muted-foreground mt-2">
-                      {includeExamples 
-                        ? "Students will have the option to view this example if they're stuck." 
-                        : "This example is for your reference only and won't be shown to students."}
-                    </p>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
+                      ? "Students will have the option to view this example if they're stuck. Use '-' to create bullet points." 
+                      : "This example is for your reference only and won't be shown to students. Use '-' to create bullet points."}
+                  </p>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
             </div>
             
             <Button

@@ -560,18 +560,26 @@ const StudentAssignmentDetails = () => {
   <span>Question {currentQuestionIndex + 1} of {assignment.questions.length}</span>
 </CardTitle>
           <CardContent className="flex flex-col gap-8 p-6"> {/* Added flex-col, gap-8 and p-6 for extra spacing and padding */}
-  {/* Cue Card: Render if an example exists */}
-  {hasExample ? (
-    <div className="border p-6 rounded-lg bg-muted/40 text-left"> {/* Added text-left and p-6 */}
-      <p className="text-lg font-semibold">{currentQuestionData.question}</p>
-      <div className="mt-4 text-sm text-gray-700"> {/* Increased margin-top (mt-4) for extra spacing */}
-        <span className="font-bold">Cue Card: </span>
-        <p>{currentExample}</p>
-      </div>
-    </div>
-  ) : (
-    <p className="text-lg">{currentQuestionData.question}</p>
-  )}
+        {/* Cue Card: Render if an example exists */}
+        {hasExample ? (
+          <div className="border p-6 rounded-lg bg-muted/40 text-left">
+            <p className="text-lg font-semibold">{currentQuestionData.question}</p>
+            <div className="mt-4 text-sm text-gray-700">
+              <div className="font-bold mb-2">Cue Card: </div>
+              <ul className="list-disc pl-5 space-y-1">
+                {currentExample.split('\n').map((line, i) => (
+                  line.trim() ? 
+                    <li key={i} className="ml-0">
+                      {line.trim().startsWith('- ') ? line.substring(2) : line.startsWith('-') ? line.substring(1) : line}
+                    </li>
+                  : null
+                ))}
+              </ul>
+            </div>
+          </div>
+        ) : (
+          <p className="text-lg">{currentQuestionData.question}</p>
+        )}
 
   {/* Recording UI */}
   <div className="bg-muted/40 rounded-lg p-6 flex flex-col items-center">
