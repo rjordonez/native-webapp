@@ -556,122 +556,122 @@ const StudentAssignmentDetails = () => {
         </div>
         
         <Card className="mb-8">
-        <CardTitle className="w-full px-6 pt-6 flex items-center">
-  <span>Question {currentQuestionIndex + 1} of {assignment.questions.length}</span>
-</CardTitle>
-          <CardContent className="flex flex-col gap-8 p-6"> {/* Added flex-col, gap-8 and p-6 for extra spacing and padding */}
-        {/* Cue Card: Render if an example exists */}
-        {hasExample ? (
-          <div className="border p-6 rounded-lg bg-muted/40 text-left">
-            <p className="text-lg font-semibold">{currentQuestionData.question}</p>
-            <div className="mt-4 text-sm text-gray-700">
-              <div className="font-bold mb-2">Cue Card: </div>
-              <ul className="list-disc pl-5 space-y-1">
-                {currentExample.split('\n').map((line, i) => (
-                  line.trim() ? 
-                    <li key={i} className="ml-0">
-                      {line.trim().startsWith('- ') ? line.substring(2) : line.startsWith('-') ? line.substring(1) : line}
-                    </li>
-                  : null
-                ))}
-              </ul>
-            </div>
-          </div>
-        ) : (
-          <p className="text-lg">{currentQuestionData.question}</p>
-        )}
+  <CardTitle className="w-full px-6 pt-6 flex items-center">
+    <span>Question {currentQuestionIndex + 1} of {assignment.questions.length}</span>
+  </CardTitle>
+  <CardContent className="flex flex-col gap-8 p-6">
+    {/* First section: Cue Card title, question, and example text */}
+    <div className="border rounded-lg p-6 bg-muted/40">
+      <h2 className="text-2xl font-bold mb-4">Cue Card</h2>
+      
+      <p className="text-xl font-semibold mb-4">{currentQuestionData.question}</p>
+      
+      {hasExample && (
+        <div className="mt-4">
+          <ul className="list-disc pl-5 space-y-1">
+            {currentExample.split('\n').map((line, i) => (
+              line.trim() ? 
+                <li key={i} className="ml-0 text-lg">
+                  {line.trim().startsWith('- ') ? line.substring(2) : line.startsWith('-') ? line.substring(1) : line}
+                </li>
+              : null
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
 
-  {/* Recording UI */}
-  <div className="bg-muted/40 rounded-lg p-6 flex flex-col items-center">
-    {audioUrls[currentQuestionIndex] && !isRecording ? (
-      <div className="w-full">
-        <div className="mb-4 text-center text-green-600 font-medium flex items-center justify-center">
-          <Check className="mr-2 h-5 w-5" />
-          Recording Complete
-        </div>
-        <audio 
-          src={audioUrls[currentQuestionIndex]} 
-          controls 
-          className="w-full" 
-        />
-        <div className="mt-4 text-center">
-          <Button 
-            onClick={toggleRecording}
-            disabled={isUploading}
-          >
-            {isUploading ? "Processing..." : "Record Again"}
-          </Button>
-        </div>
-      </div>
-    ) : (
-      <div className="text-center">
-        <div className="mb-4">
-          <Button
-            size="lg"
-            className={`rounded-full p-8 ${isRecording ? "bg-red-500 hover:bg-red-600" : ""}`}
-            disabled={isUploading || (isRecording && isStopDisabled)}
-            onClick={toggleRecording}
-            title={
-              isRecording && isStopDisabled 
-                ? `Cannot stop for ${MINIMUM_RECORDING_SECONDS} seconds` 
-                : (isRecording ? "Stop Recording" : "Start Recording")
-            }
-          >
-            {isRecording ? (
-              <Square className="h-8 w-8" />
-            ) : (
-              <Mic className="h-8 w-8" />
-            )}
-          </Button>
-        </div>
-        
-        {isRecording ? (
-          <>
-            <div className="text-lg font-semibold mb-2">
-              Recording: {formatTimeDisplay(timeLeft)} left
-            </div>
-            {isStopDisabled && ( 
-              <div className="text-sm text-blue-500">
-                Minimum recording time: {MINIMUM_RECORDING_SECONDS} seconds (cannot stop yet)
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="text-muted-foreground">
-            {isUploading ? "Processing..." : `Click to start recording (${formatTimeDisplay(timeLeft)} max)`}
+    {/* Second section: Recording UI in a separate container */}
+    <div className="border rounded-lg p-6 bg-muted/40 flex flex-col items-center">
+      {audioUrls[currentQuestionIndex] && !isRecording ? (
+        <div className="w-full">
+          <div className="mb-4 text-center text-green-600 font-medium flex items-center justify-center">
+            <Check className="mr-2 h-5 w-5" />
+            Recording Complete
           </div>
-        )}
-      </div>
-    )}
-  </div>
-</CardContent>
-
-          <CardFooter className="flex justify-between">
+          <audio 
+            src={audioUrls[currentQuestionIndex]} 
+            controls 
+            className="w-full" 
+          />
+          <div className="mt-4 text-center">
             <Button 
-              variant="outline" 
-              onClick={goToPreviousQuestion}
-              disabled={currentQuestionIndex === 0 || isUploading}
+              onClick={toggleRecording}
+              disabled={isUploading}
             >
-              <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+              {isUploading ? "Processing..." : "Record Again"}
             </Button>
-            
-            {currentQuestionIndex < assignment.questions.length - 1 ? (
-              <Button 
-                onClick={goToNextQuestion}
-                disabled={!audioUrls[currentQuestionIndex] || isUploading}
-              >
-                Next <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            ) : (
-              <Button 
-                onClick={submitAssignment}
-                disabled={!currentSubmission.answers.every(answer => answer.audioUrl) || isUploading}
-              >
-                Submit Assignment <Check className="ml-2 h-4 w-4" />
-              </Button>
-            )}
-          </CardFooter>
-        </Card>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center">
+          <div className="mb-4">
+            <Button
+              size="lg"
+              className={`rounded-full p-8 ${isRecording ? "bg-red-500 hover:bg-red-600" : ""}`}
+              disabled={isUploading || (isRecording && isStopDisabled)}
+              onClick={toggleRecording}
+              title={
+                isRecording && isStopDisabled 
+                  ? `Cannot stop for ${MINIMUM_RECORDING_SECONDS} seconds` 
+                  : (isRecording ? "Stop Recording" : "Start Recording")
+              }
+            >
+              {isRecording ? (
+                <Square className="h-8 w-8" />
+              ) : (
+                <Mic className="h-8 w-8" />
+              )}
+            </Button>
+          </div>
+          
+          {isRecording ? (
+            <>
+              <div className="text-lg font-semibold mb-2">
+                Recording: {formatTimeDisplay(timeLeft)} left
+              </div>
+              {isStopDisabled && ( 
+                <div className="text-sm text-blue-500">
+                  Minimum recording time: {MINIMUM_RECORDING_SECONDS} seconds (cannot stop yet)
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-muted-foreground">
+              {isUploading ? "Processing..." : `Click to start recording (${formatTimeDisplay(timeLeft)} max)`}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  </CardContent>
+
+  <CardFooter className="flex justify-between">
+    <Button 
+      variant="outline" 
+      onClick={goToPreviousQuestion}
+      disabled={currentQuestionIndex === 0 || isUploading}
+    >
+      <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+    </Button>
+    
+    {currentQuestionIndex < assignment.questions.length - 1 ? (
+      <Button 
+        onClick={goToNextQuestion}
+        disabled={!audioUrls[currentQuestionIndex] || isUploading}
+      >
+        Next <ArrowRight className="ml-2 h-4 w-4" />
+      </Button>
+    ) : (
+      <Button 
+        onClick={submitAssignment}
+        disabled={!currentSubmission.answers.every(answer => answer.audioUrl) || isUploading}
+      >
+        Submit Assignment <Check className="ml-2 h-4 w-4" />
+      </Button>
+    )}
+  </CardFooter>
+</Card>
         
         <div className="flex justify-center mb-8">
           <div className="flex gap-2">
