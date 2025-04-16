@@ -12,21 +12,25 @@ import AppNavbar from "@/components/AppNavbar";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { sendToAnalysisAPI } from "@/lib/api-services";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
-// Extended Assignment interface to include examples
-interface QuestionWithExample {
+
+// Interface for parsed metadata
+interface QuestionWithTimeLimit {
   question: string;
-  example: string;
+  timeLimit: string;
+  example?: string;
 }
+
+interface AssignmentMetadata {
+  questionsWithTimeLimits: QuestionWithTimeLimit[];
+}
+
+// Define the minimum recording duration
+const MINIMUM_RECORDING_SECONDS = 5;
+const DEFAULT_RECORDING_SECONDS = 60; // Default if no metadata exists
+
+
+
 
 const StudentAssignmentDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -43,12 +47,17 @@ const StudentAssignmentDetails = () => {
   
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(40);
+  const [timeLeft, setTimeLeft] = useState(DEFAULT_RECORDING_SECONDS);
   const [isUploading, setIsUploading] = useState(false);
   const [currentSubmission, setCurrentSubmission] = useState<Submission | undefined>();
   const [showExampleDialog, setShowExampleDialog] = useState(false);
+  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null); // Track recording start time
+  const [isStopDisabled, setIsStopDisabled] = useState(false); // Track if stop button is disabled by minimum time
+  const [questionTimeLimits, setQuestionTimeLimits] = useState<number[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
+  const [questionExamples, setQuestionExamples] = useState<string[]>([]);
+
   
   const assignment = useMemo(() => assignments.find(a => a.id === id), [assignments, id]);
   const classes = useMemo(() => getClassesByUser(), [getClassesByUser]);
@@ -57,37 +66,72 @@ const StudentAssignmentDetails = () => {
     [assignment, classes]
   );
 
+  const stoppedDueToTabSwitchRef = useRef(false);
+
+
+
+  // Parse assignment metadata when assignment changes
+  useEffect(() => {
+    if (!assignment) return;
+    
+    try {
+      // Check if metadata exists
+      if (assignment.metadata) {
+        const metadata = JSON.parse(assignment.metadata) as AssignmentMetadata;
+        
+        if (metadata.questionsWithTimeLimits) {
+          // Extract time limits for each question
+          const timeLimits = metadata.questionsWithTimeLimits.map(q => 
+            parseInt(q.timeLimit, 10) || DEFAULT_RECORDING_SECONDS
+          );
+          // Extract examples for each question
+          const examples = metadata.questionsWithTimeLimits.map(q => q.example || "");
+          
+          setQuestionTimeLimits(timeLimits);
+          setQuestionExamples(examples);  // <<=== NEW: set examples from metadata
+          
+          // Set initial time limit for the first question
+          if (timeLimits.length > 0) {
+            setTimeLeft(timeLimits[0]);
+          }
+        }
+      } else {
+        // If no metadata, set default time limits for all questions
+        setQuestionTimeLimits(assignment.questions.map(() => DEFAULT_RECORDING_SECONDS));
+        setTimeLeft(DEFAULT_RECORDING_SECONDS);
+      }
+    } catch (error) {
+      console.error("Error parsing assignment metadata:", error);
+      // Fallback to default time limits if parsing fails
+      setQuestionTimeLimits(assignment.questions.map(() => DEFAULT_RECORDING_SECONDS));
+      setTimeLeft(DEFAULT_RECORDING_SECONDS);
+    }
+  }, [assignment]);
+
+  // Update time limit when question changes
+  useEffect(() => {
+    if (questionTimeLimits.length > 0 && currentQuestionIndex < questionTimeLimits.length) {
+      setTimeLeft(questionTimeLimits[currentQuestionIndex]);
+    }
+  }, [currentQuestionIndex, questionTimeLimits]);
+
   // Derived state for audio URLs
   const audioUrls = useMemo(() => 
     currentSubmission?.answers.map(answer => answer.audioUrl || "") || [],
     [currentSubmission]
   );
-  
   // Parse the question to extract the question text and example
   const currentQuestionData = useMemo(() => {
     if (!assignment || !assignment.questions[currentQuestionIndex]) return { question: "", example: "" };
     
-    const questionText = assignment.questions[currentQuestionIndex];
-    
-    try {
-      // Check if the question is in JSON format containing an example
-      if (questionText.startsWith('{') && questionText.includes('"question"') && questionText.includes('"example"')) {
-        const parsed = JSON.parse(questionText) as QuestionWithExample;
-        return {
-          question: parsed.question || "",
-          example: parsed.example || ""
-        };
-      }
-    } catch (e) {
-      console.error("Error parsing question JSON:", e);
-    }
-    
-    // If not JSON or parsing failed, return the original text as the question
     return { 
-      question: questionText,
-      example: ""
+      question: assignment.questions[currentQuestionIndex],
+      example: questionExamples[currentQuestionIndex] || ""
     };
-  }, [assignment, currentQuestionIndex]);
+  }, [assignment, currentQuestionIndex, questionExamples]);
+
+
+  
 
   // Check if the current question has an example
   const hasExample = useMemo(() => {
@@ -99,6 +143,39 @@ const StudentAssignmentDetails = () => {
     return currentQuestionData.example || "";
   }, [currentQuestionData]);
 
+  // Define stopRecording *before* the timer useEffect that uses it
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop(); // This will trigger handleStop
+      setIsRecording(false);
+      // Don't reset timeLeft here, let the next start handle it or the useEffect timer
+      // Don't reset recordingStartTime or isStopDisabled here, handleStop does it
+    } else {
+       // Ensure consistency if called when not recording
+       setIsRecording(false);
+       setIsStopDisabled(false);
+       setRecordingStartTime(null);
+    }
+  }, [setIsRecording, setIsStopDisabled, setRecordingStartTime]); // Updated dependencies to include setters used
+
+
+  // Add this useEffect to handle visibility changes
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && isRecording) {
+        console.log("Tab switched while recording, setting flag");
+        stoppedDueToTabSwitchRef.current = true;
+        stopRecording();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isRecording, stopRecording]);
+  
   // Setup media recorder
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -115,8 +192,22 @@ const StudentAssignmentDetails = () => {
         };
         
         const handleStop = async () => {
+          // Reset start time and disabled status when stopped
+          setRecordingStartTime(null);
+          setIsStopDisabled(false); 
+
+          console.log("In handleStop, stoppedDueToTabSwitch is:", stoppedDueToTabSwitchRef.current);
+
+          if (stoppedDueToTabSwitchRef.current) {
+            console.log("Showing tab switch notification");
+            toast.info("Recording stopped because you switched tabs");
+            stoppedDueToTabSwitchRef.current = false;
+          }
+
           const chunks = recordedChunksRef.current;
-          if (chunks.length === 0) return;
+          recordedChunksRef.current = []; 
+
+          if (chunks.length === 0) return; 
           
           const audioBlob = new Blob(chunks, { type: 'audio/webm' });
           
@@ -168,8 +259,6 @@ const StudentAssignmentDetails = () => {
               setIsUploading(false);
             }
           }
-          
-          recordedChunksRef.current = [];
         };
 
         recorder.addEventListener('dataavailable', handleDataAvailable);
@@ -186,13 +275,16 @@ const StudentAssignmentDetails = () => {
     
     return () => {
       if (mediaRecorderRef.current?.state === 'recording') {
-        mediaRecorderRef.current.stop();
+        try { mediaRecorderRef.current.stop(); } catch (e) { console.error("Cleanup stop error:", e); }
       }
       if (mediaRecorderRef.current) {
         mediaRecorderRef.current.stream?.getTracks().forEach(track => track.stop());
       }
+      recordedChunksRef.current = [];
+      setRecordingStartTime(null); // Reset on unmount/re-render
+      setIsStopDisabled(false);
     };
-  }, [assignment, user, currentQuestionIndex, uploadAudio, updateSubmission]);
+  }, [assignment, user, currentQuestionIndex, uploadAudio, updateSubmission, setRecordingStartTime, setIsStopDisabled, setIsUploading, setCurrentSubmission]);
 
   // Initialize submission
   useEffect(() => {
@@ -216,36 +308,54 @@ const StudentAssignmentDetails = () => {
     setCurrentSubmission(submission);
   }, [assignment, user, submissions]);
 
-  // Recording timer
+  // Recording timer: Handles countdown AND stop button disable logic
   useEffect(() => {
     let timer: number | undefined;
-    
-    if (isRecording && timeLeft > 0) {
-      timer = window.setInterval(() => {
-        setTimeLeft(prev => prev - 1);
-      }, 1000);
-    } else if (isRecording && timeLeft === 0) {
-      stopRecording();
+
+    if (isRecording) {
+      // Check elapsed time for disabling stop button
+      const now = Date.now();
+      const elapsed = recordingStartTime ? now - recordingStartTime : 0;
+      
+      if (elapsed < MINIMUM_RECORDING_SECONDS * 1000) {
+        setIsStopDisabled(true);
+      } else {
+         // Once 5 seconds have passed, ensure button is enabled
+        setIsStopDisabled(false); 
+      }
+
+      // Handle countdown timer
+      if (timeLeft > 0) {
+        timer = window.setInterval(() => {
+          setTimeLeft(prev => prev - 1);
+          // Re-check elapsed time every second within the timer as well
+          const currentElapsed = recordingStartTime ? Date.now() - recordingStartTime : 0;
+           if (currentElapsed >= MINIMUM_RECORDING_SECONDS * 1000 && isStopDisabled) {
+              setIsStopDisabled(false);
+           }
+        }, 1000);
+      } else {
+        // Time ran out, stop recording
+        console.log("Timer reached 0, stopping recording.");
+        stopRecording(); // Now stopRecording is defined
+      }
+    } else {
+      // Ensure button is not disabled if not recording
+      setIsStopDisabled(false);
     }
     
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [isRecording, timeLeft]);
-
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      setIsRecording(false);
-      mediaRecorderRef.current.stop();
-    }
-  }, []);
+  // Dependencies include states checked/set inside
+  }, [isRecording, timeLeft, recordingStartTime, stopRecording, setIsStopDisabled, isStopDisabled, setTimeLeft]); // Added setTimeLeft
 
   // Close example dialog when changing questions
   useEffect(() => {
     setShowExampleDialog(false);
   }, [currentQuestionIndex]);
 
-  // Modified toggleRecording to clear previous recordings and persist "in_progress" status
+  // toggleRecording: Sets start time or calls stopRecording
   const toggleRecording = useCallback(() => {
     if (!mediaRecorderRef.current) {
       toast.error('Microphone not ready. Please refresh the page.');
@@ -253,51 +363,41 @@ const StudentAssignmentDetails = () => {
     }
 
     if (isRecording) {
-      stopRecording();
+      // Stop button was clicked - stopRecording handles the rest
+      // The button itself is disabled for the first 5s by the timer effect
+      stopRecording(); 
     } else {
-      // When starting a new recording, clear the previous saved recording for this question
+      // --- Start Recording ---
+      // Clear previous audio URL if any
       if (audioUrls[currentQuestionIndex]) {
-        // Clear the saved audio URL from the current submission
         setCurrentSubmission(prev => {
           if (!prev) return prev;
           const updatedAnswers = [...prev.answers];
-          updatedAnswers[currentQuestionIndex] = {
-            ...updatedAnswers[currentQuestionIndex],
-            audioUrl: ""  // Clear the audio URL
-          };
-          
-          // Create updated submission object with correct type
-          const updatedSubmission = {
-            ...prev,
-            status: "in_progress" as const, // Use const assertion to fix the type
-            answers: updatedAnswers
-          };
-          
-          // Persist this change to the context/backend if we already have some answers
-          // Check if we have at least one answer with an audio URL
+          updatedAnswers[currentQuestionIndex] = { ...updatedAnswers[currentQuestionIndex], audioUrl: "" };
+          const updatedSubmission = { ...prev, status: "in_progress" as const, answers: updatedAnswers };
           const hasAnyRecordings = updatedAnswers.some(a => a.audioUrl && a.audioUrl.trim() !== "");
           if (hasAnyRecordings) {
-            updateSubmission(updatedSubmission)
-              .then(() => console.log("Submission status updated after clearing audio"))
-              .catch(err => console.error("Failed to update submission:", err));
+            updateSubmission(updatedSubmission).catch(err => console.error("Failed update:", err));
           }
-          
           return updatedSubmission;
         });
       }
       
-      recordedChunksRef.current = [];
+      recordedChunksRef.current = []; 
+      setRecordingStartTime(Date.now()); // Set start time
       setIsRecording(true);
-      setTimeLeft(40);
-      mediaRecorderRef.current.start(100);
+      setIsStopDisabled(true); // Initially disable stop button
+      // Do not reset timeLeft here, as it's set when question changes
+      mediaRecorderRef.current.start(100); 
+      toast.info(`Recording started. Minimum duration: ${MINIMUM_RECORDING_SECONDS} seconds.`);
     }
-  }, [isRecording, stopRecording, audioUrls, currentQuestionIndex, updateSubmission]);
+  }, [isRecording, stopRecording, audioUrls, currentQuestionIndex, updateSubmission, setCurrentSubmission, setRecordingStartTime, setIsRecording, setIsStopDisabled]);
 
   const goToNextQuestion = useCallback(() => {
     if (assignment && currentQuestionIndex < assignment.questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setIsRecording(false);
-      setTimeLeft(40);
+      // Time limit will be updated in the useEffect that watches currentQuestionIndex
     }
   }, [assignment, currentQuestionIndex]);
 
@@ -305,7 +405,7 @@ const StudentAssignmentDetails = () => {
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
       setIsRecording(false);
-      setTimeLeft(40);
+      // Time limit will be updated in the useEffect that watches currentQuestionIndex
     }
   }, [currentQuestionIndex]);
 
@@ -376,6 +476,21 @@ const StudentAssignmentDetails = () => {
     return (answeredCount / assignment.questions.length) * 100;
   }, [currentSubmission, assignment]);
 
+  // Helper function to format time for display
+  const formatTimeDisplay = useCallback((seconds: number): string => {
+    if (seconds < 60) {
+      return `${seconds} seconds`;
+    } else if (seconds === 60) {
+      return `1 minute`;
+    } else if (seconds % 60 === 0) {
+      return `${seconds / 60} minutes`;
+    } else {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    }
+  }, []);
+
   if (loading || !assignment || !currentSubmission) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
@@ -441,75 +556,88 @@ const StudentAssignmentDetails = () => {
         </div>
         
         <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex justify-between items-center">
-              <span>Question {currentQuestionIndex + 1} of {assignment.questions.length}</span>
-              {hasExample && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setShowExampleDialog(true)}
-                  className="text-blue-500 hover:text-blue-600"
-                >
-                  <HelpCircle className="h-4 w-4 mr-1" /> View Example
-                </Button>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-lg">{currentQuestionData.question}</p>
-            
-            <div className="bg-muted/40 rounded-lg p-6 flex flex-col items-center">
-              {audioUrls[currentQuestionIndex] ? (
-                <div className="w-full">
-                  <div className="mb-4 text-center text-green-600 font-medium flex items-center justify-center">
-                    <Check className="mr-2 h-5 w-5" />
-                    Recording Complete
-                  </div>
-                  <audio 
-                    src={audioUrls[currentQuestionIndex]} 
-                    controls 
-                    className="w-full" 
-                  />
-                  <div className="mt-4 text-center">
-                    <Button 
-                      onClick={toggleRecording}
-                      disabled={isUploading}
-                    >
-                      {isUploading ? "Processing..." : "Record Again"}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center">
-                  <div className="mb-4">
-                    <Button
-                      size="lg"
-                      className={`rounded-full p-8 ${isRecording ? "bg-red-500 hover:bg-red-600" : ""}`}
-                      onClick={toggleRecording}
-                      disabled={isUploading}
-                    >
-                      {isRecording ? (
-                        <Square className="h-8 w-8" />
-                      ) : (
-                        <Mic className="h-8 w-8" />
-                      )}
-                    </Button>
-                  </div>
-                  
-                  {isRecording ? (
-                    <div className="text-lg font-semibold">
-                      Recording: {timeLeft} seconds left
-                    </div>
-                  ) : (
-                    <div className="text-muted-foreground">
-                      {isUploading ? "Processing..." : "Click to start recording"}
-                    </div>
-                  )}
-                </div>
-              )}
+        <CardTitle className="w-full px-6 pt-6 flex items-center">
+  <span>Question {currentQuestionIndex + 1} of {assignment.questions.length}</span>
+</CardTitle>
+          <CardContent className="flex flex-col gap-8 p-6"> {/* Added flex-col, gap-8 and p-6 for extra spacing and padding */}
+  {/* Cue Card: Render if an example exists */}
+  {hasExample ? (
+    <div className="border p-6 rounded-lg bg-muted/40 text-left"> {/* Added text-left and p-6 */}
+      <p className="text-lg font-semibold">{currentQuestionData.question}</p>
+      <div className="mt-4 text-sm text-gray-700"> {/* Increased margin-top (mt-4) for extra spacing */}
+        <span className="font-bold">Cue Card: </span>
+        <p>{currentExample}</p>
+      </div>
+    </div>
+  ) : (
+    <p className="text-lg">{currentQuestionData.question}</p>
+  )}
+
+  {/* Recording UI */}
+  <div className="bg-muted/40 rounded-lg p-6 flex flex-col items-center">
+    {audioUrls[currentQuestionIndex] && !isRecording ? (
+      <div className="w-full">
+        <div className="mb-4 text-center text-green-600 font-medium flex items-center justify-center">
+          <Check className="mr-2 h-5 w-5" />
+          Recording Complete
+        </div>
+        <audio 
+          src={audioUrls[currentQuestionIndex]} 
+          controls 
+          className="w-full" 
+        />
+        <div className="mt-4 text-center">
+          <Button 
+            onClick={toggleRecording}
+            disabled={isUploading}
+          >
+            {isUploading ? "Processing..." : "Record Again"}
+          </Button>
+        </div>
+      </div>
+    ) : (
+      <div className="text-center">
+        <div className="mb-4">
+          <Button
+            size="lg"
+            className={`rounded-full p-8 ${isRecording ? "bg-red-500 hover:bg-red-600" : ""}`}
+            disabled={isUploading || (isRecording && isStopDisabled)}
+            onClick={toggleRecording}
+            title={
+              isRecording && isStopDisabled 
+                ? `Cannot stop for ${MINIMUM_RECORDING_SECONDS} seconds` 
+                : (isRecording ? "Stop Recording" : "Start Recording")
+            }
+          >
+            {isRecording ? (
+              <Square className="h-8 w-8" />
+            ) : (
+              <Mic className="h-8 w-8" />
+            )}
+          </Button>
+        </div>
+        
+        {isRecording ? (
+          <>
+            <div className="text-lg font-semibold mb-2">
+              Recording: {formatTimeDisplay(timeLeft)} left
             </div>
-          </CardContent>
+            {isStopDisabled && ( 
+              <div className="text-sm text-blue-500">
+                Minimum recording time: {MINIMUM_RECORDING_SECONDS} seconds (cannot stop yet)
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="text-muted-foreground">
+            {isUploading ? "Processing..." : `Click to start recording (${formatTimeDisplay(timeLeft)} max)`}
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+</CardContent>
+
           <CardFooter className="flex justify-between">
             <Button 
               variant="outline" 
@@ -548,7 +676,7 @@ const StudentAssignmentDetails = () => {
                 onClick={() => {
                   setCurrentQuestionIndex(index);
                   setIsRecording(false);
-                  setTimeLeft(40);
+                  // Time limit will be updated in the useEffect
                 }}
                 disabled={isUploading}
               >
@@ -558,34 +686,7 @@ const StudentAssignmentDetails = () => {
           </div>
         </div>
 
-        {/* Example Dialog */}
-        <AlertDialog open={showExampleDialog} onOpenChange={setShowExampleDialog}>
-          <AlertDialogContent className="max-w-md">
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex justify-between items-center">
-                <span>Example Answer</span>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-8 w-8 p-0" 
-                  onClick={() => setShowExampleDialog(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </AlertDialogTitle>
-              <AlertDialogDescription className="text-foreground">
-                <div className="mt-2 text-sm bg-muted/30 p-4 rounded-md">
-                  {currentExample}
-                </div>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogAction onClick={() => setShowExampleDialog(false)}>
-                Got it
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+      
       </main>
     </div>
   );

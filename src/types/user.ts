@@ -24,6 +24,7 @@ export interface Assignment {
   topic: string;
   questions: string[];
   createdAt: string;
+  metadata?: any;
 }
 
 interface StudentClass {

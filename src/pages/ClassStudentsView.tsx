@@ -7,93 +7,57 @@ import { Progress } from '@/components/ui/progress';
 import AppNavbar from '@/components/AppNavbar';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
+import { toast } from 'sonner';
+import { GradingService, StudentPerformance, GradeDistribution } from '@/lib/grading-service';
 
 const ClassStudentsView = () => {
   const { id } = useParams(); // Get the class ID from the URL
   const navigate = useNavigate();
-  const { 
-    getStudentsByClass, 
-    getClassById
-  } = useClass();
+  const { getClassById } = useClass();
   
-  const [students, setStudents] = useState([]);
+  const [students, setStudents] = useState<StudentPerformance[]>([]);
   const [className, setClassName] = useState('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  
-  // Mock student grades data
-  const mockStudentGrades = {
-    // These will be populated with mock data for each student
-  };
-  
-  // Mock class average
-  const [classAverage, setClassAverage] = useState(78.5);
+  const [error, setError] = useState<string | null>(null);
+  const [classAverage, setClassAverage] = useState(0);
+  const [gradeDistribution, setGradeDistribution] = useState<GradeDistribution>({
+    A: 0, B: 0, C: 0, D: 0, F: 0
+  });
   
   useEffect(() => {
-    const loadStudents = async () => {
+    const loadData = async () => {
+      if (!id) return;
+      
       try {
+        setLoading(true);
+        
         // Fetch class details to get the class name
         const classData = await getClassById(id);
         setClassName(classData?.name || 'Unknown Class');
         
-        // Fetch students for the class
-        const studentsData = await getStudentsByClass(id);
+        // Fetch students performance data from the backend
+        const studentsData = await GradingService.getStudentPerformanceByClass(id);
         setStudents(studentsData || []);
         
-        // Generate mock grades for each student
-        const mockGrades = {};
-        let totalPercentage = 0;
-        
-        studentsData.forEach(student => {
-          // Generate random grade data for each student
-          const percentage = Math.floor(Math.random() * 41) + 60; // Random grade between 60-100
-          const totalAssignments = 10; // Fixed number for simplicity
-          const completedAssignments = Math.floor(Math.random() * (totalAssignments + 1)); // Random completed between 0-10
-          
-          mockGrades[student.id] = {
-            percentage,
-            completedAssignments,
-            totalAssignments
-          };
-          
-          totalPercentage += percentage;
-        });
-        
-        // Calculate and set class average based on mock data
+        // Calculate class average and grade distribution
         if (studentsData.length > 0) {
-          setClassAverage(totalPercentage / studentsData.length);
+          const average = GradingService.calculateClassAverage(studentsData);
+          setClassAverage(average);
+          
+          const distribution = GradingService.getGradeDistribution(studentsData);
+          setGradeDistribution(distribution);
         }
-        
-        // Set student grades using the mock data
-        Object.assign(mockStudentGrades, mockGrades);
       } catch (error) {
-        console.error('Error fetching students:', error);
+        console.error('Error fetching class data:', error);
         setError('Failed to load class or students. Please try again.');
+        toast.error('Failed to load class data');
       } finally {
         setLoading(false);
       }
     };
 
-    loadStudents();
-  }, [id, getStudentsByClass, getClassById]);
-
-  // Format grade as a letter grade
-  const getLetterGrade = (percentage) => {
-    if (percentage >= 90) return 'A';
-    if (percentage >= 80) return 'B';
-    if (percentage >= 70) return 'C';
-    if (percentage >= 60) return 'D';
-    return 'F';
-  };
-  
-  // Get color for progress bar based on grade
-  const getGradeColor = (percentage) => {
-    if (percentage >= 90) return "bg-green-500";
-    if (percentage >= 80) return "bg-blue-500";
-    if (percentage >= 70) return "bg-yellow-500";
-    if (percentage >= 60) return "bg-orange-500";
-    return "bg-red-500";
-  };
+    loadData();
+  }, [id, getClassById]);
 
   if (loading) {
     return (
@@ -142,7 +106,7 @@ const ClassStudentsView = () => {
                 <h3 className="text-sm font-medium mb-2">Class Average</h3>
                 <p className="text-2xl font-semibold">{classAverage.toFixed(1)}%</p>
                 <p className="text-sm text-muted-foreground">
-                  Letter Grade: {getLetterGrade(classAverage)}
+                  Letter Grade: {GradingService.getLetterGrade(classAverage)}
                 </p>
               </div>
               <div className="border rounded-lg p-4">
@@ -153,11 +117,11 @@ const ClassStudentsView = () => {
                 <h3 className="text-sm font-medium mb-2">Grading Distribution</h3>
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">
-                    <span>A: {students.filter(s => getLetterGrade(mockStudentGrades[s.id]?.percentage || 0) === 'A').length}</span>
-                    <span>B: {students.filter(s => getLetterGrade(mockStudentGrades[s.id]?.percentage || 0) === 'B').length}</span>
-                    <span>C: {students.filter(s => getLetterGrade(mockStudentGrades[s.id]?.percentage || 0) === 'C').length}</span>
-                    <span>D: {students.filter(s => getLetterGrade(mockStudentGrades[s.id]?.percentage || 0) === 'D').length}</span>
-                    <span>F: {students.filter(s => getLetterGrade(mockStudentGrades[s.id]?.percentage || 0) === 'F').length}</span>
+                    <span>A: {gradeDistribution.A}</span>
+                    <span>B: {gradeDistribution.B}</span>
+                    <span>C: {gradeDistribution.C}</span>
+                    <span>D: {gradeDistribution.D}</span>
+                    <span>F: {gradeDistribution.F}</span>
                   </div>
                 </div>
               </div>
@@ -190,24 +154,18 @@ const ClassStudentsView = () => {
                   </TableRow>
                 ) : (
                   students.map((student) => {
-                    // Use mock data or default values if student ID not in mockStudentGrades
-                    const grade = mockStudentGrades[student.id] || { 
-                      percentage: Math.floor(Math.random() * 41) + 60, 
-                      completedAssignments: Math.floor(Math.random() * 11), 
-                      totalAssignments: 10 
-                    };
-                    const percentage = Math.round(grade.percentage);
-                    const letterGrade = getLetterGrade(percentage);
-                    const gradeColor = getGradeColor(percentage);
+                    const percentage = student.percentage !== null ? Math.round(student.percentage) : null;
+                    const letterGrade = GradingService.getLetterGrade(percentage);
+                    const gradeColor = GradingService.getGradeColor(percentage);
                     
                     return (
                       <TableRow key={student.id}>
                         <TableCell className="font-medium">{student.name}</TableCell>
                         <TableCell>
-                          {grade.completedAssignments} / {grade.totalAssignments}
+                          {student.completedAssignments} / {student.totalAssignments}
                         </TableCell>
                         <TableCell className="font-semibold">
-                          {percentage}%
+                          {percentage !== null ? `${percentage}%` : 'N/A'}
                         </TableCell>
                         <TableCell>
                           {letterGrade}
@@ -215,7 +173,7 @@ const ClassStudentsView = () => {
                         <TableCell className="w-40">
                           <div className="flex items-center gap-2">
                             <Progress 
-                              value={percentage} 
+                              value={percentage || 0} 
                               max={100}
                               className={`h-2 ${gradeColor}`}
                             />

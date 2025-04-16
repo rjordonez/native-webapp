@@ -1,3 +1,5 @@
+import { useAuth } from "@/context/AuthContext";
+import posthog from 'posthog-js';
 import { useParams, useNavigate } from "react-router-dom";
 import { useClass } from "@/context/ClassContext";
 import { Button } from "@/components/ui/button";
@@ -10,6 +12,7 @@ import React, { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 // Voice Tutor Report Component
 // Voice Tutor Report Component
@@ -70,7 +73,17 @@ interface PronunciationAnalysis {
   improvement_suggestion: string;
   url: string;
 }
+interface LexicalResource {
+  original_phrase: string;
+  suggested_phrase: string;
+  explanation: string;
+  resource_type: string;
+}
 
+interface SentenceLexical {
+  original: string;
+  suggestions: LexicalResource[];
+}
 // fluency and coherence
 interface FluencyMetrics {
   speech_rate: number;
@@ -119,8 +132,10 @@ interface AnalysisReport {
   pronunciation_analysis: PronunciationAnalysis[];
   grammar_analysis: Record<string, SentenceCorrection>;
   vocabulary_suggestions: Record<string, SentenceVocab>;
+  lexical_resources?: Record<string, SentenceLexical>;  // Add this line (with optional ? since old reports might not have it)
   fluency_coherence_analysis?: Record<string, FluencyCoherenceAnalysis>;
 }
+
 
 
 // Custom tooltip for RadarChart
@@ -138,13 +153,74 @@ const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
   return null;
 };
 
+const ExpandableTranscript = ({ text }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isLongText = text.length > 100;
+  
+  return (
+    <div className="mb-6">
+      <h2 className="text-lg font-semibold mb-2">Transcript</h2>
+      <div className="bg-gray-50 p-4 rounded border">
+        <div className={`${!isExpanded && isLongText ? "max-h-32 overflow-hidden relative" : ""}`}>
+          <p className="text-gray-800 whitespace-pre-wrap">{text}</p>
+          
+          {!isExpanded && isLongText && (
+            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-gray-50 to-transparent"></div>
+          )}
+        </div>
+        
+        {isLongText && (
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="mt-2 flex items-center text-blue-600 hover:text-blue-800 text-sm font-medium"
+          >
+            {isExpanded ? (
+              <>
+                <ChevronUp size={16} className="mr-1" /> Show Less
+              </>
+            ) : (
+              <>
+                <ChevronDown size={16} className="mr-1" /> Show Full Transcript
+              </>
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
 
-const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
-  const [activeAnalysisIndex, setActiveAnalysisIndex] = useState(0);
-  const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
-  const [activeTab, setActiveTab] = useState("pronunciation"); // Added tab state
+const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisReport; studentName?: string }) => {
+
   
 
+  const [activeAnalysisIndex, setActiveAnalysisIndex] = useState(0);
+  const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
+  const [activeTab, setActiveTab] = useState("fluency");
+  const [tabStartTime, setTabStartTime] = useState(Date.now());
+  useEffect(() => {
+    return () => {
+      const finalTimeSpent = Math.floor((Date.now() - tabStartTime) / 1000);
+      posthog.capture('voice_tutor_tab_time_spent', {
+        tab: activeTab,
+        seconds: finalTimeSpent,
+      });
+    };
+  }, []);
+  const handleTabChange = (tab: string) => {
+    const now = Date.now();
+    const timeSpent = Math.floor((now - tabStartTime) / 1000);
+    
+    posthog.capture('voice_tutor_tab_time_spent', {
+      tab: activeTab,
+      seconds: timeSpent,
+    });
+  
+    setActiveTab(tab);
+    setTabStartTime(now);
+  };
+
+  
   // Helper function to format date
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -244,9 +320,8 @@ const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
     <div className="bg-white shadow rounded-lg p-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="border-b pb-4 mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Voice Analysis Report</h1>
+        <h1 className="text-2xl font-bold text-gray-800">{studentName}'s Analysis Report</h1>
         <div className="flex justify-between mt-2">
-          <p className="text-gray-500">Submission ID: {report.submission_id}</p>
           <p className="text-gray-500">Date: {formatDate(report.timestamp)}</p>
         </div>
         <div className="mt-2 flex items-center">
@@ -297,50 +372,14 @@ const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
       )}
 
       {/* Transcript */}
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold mb-2">Transcript</h2>
-        <div className="bg-gray-50 p-4 rounded border">
-          <p className="text-gray-800">{analysis.transcript}</p>
-        </div>
-      </div>
+      <ExpandableTranscript text={analysis.transcript} />
 
       {/* Analysis Tabs */}
       <div className="mb-6">
         <div className="border-b border-gray-200">
           <nav className="flex space-x-8">
             <button
-              onClick={() => setActiveTab("pronunciation")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "pronunciation"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              Pronunciation
-            </button>
-            <button
-              onClick={() => setActiveTab("grammar")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "grammar"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              Grammar
-            </button>
-            <button
-              onClick={() => setActiveTab("vocabulary")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "vocabulary"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              Vocabulary
-            </button>
-
-            <button
-              onClick={() => setActiveTab("fluency")}
+              onClick={() => handleTabChange("fluency")}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === "fluency"
                   ? "border-blue-500 text-blue-600"
@@ -349,7 +388,37 @@ const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
             >
               Fluency & Coherence
             </button>
-
+            <button
+              onClick={() => handleTabChange("vocabulary")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "vocabulary"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Lexical Resource
+              
+            </button>
+            <button
+              onClick={() => handleTabChange("grammar")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "grammar"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Grammatical Range & Accuracy
+            </button>
+            <button
+              onClick={() => handleTabChange("pronunciation")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "pronunciation"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Pronunciation
+            </button>
           </nav>
         </div>
       </div>
@@ -454,117 +523,258 @@ const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
       {activeTab === "grammar" && (
         <div>
           <h2 className="text-lg font-semibold mb-2">Grammar Analysis</h2>
-          {Object.keys(grammarCorrections).length > 0 ? (
-            <div className="space-y-6">
-              {Object.entries(grammarCorrections).map(([key, sentenceCorrection], index) => {
-                // Type assertion to tell TypeScript this is a SentenceCorrection
-                const correction = sentenceCorrection as SentenceCorrection;
-                return (
-                  <div key={index} className="bg-white p-4 border rounded-lg shadow-sm">
-                    <h3 className="font-medium text-gray-800 mb-2">
-                      Sentence {key.split('_')[1]}
-                    </h3>
-                    <div className="mb-2">
-                      <p className="text-sm text-gray-500">Original:</p>
-                      <p className="bg-gray-50 p-2 rounded">{correction.original}</p>
-                    </div>
-                    <div className="space-y-3">
-                      {correction.corrections.map((corr, idx) => (
-                        <div key={idx} className="border-l-4 border-yellow-400 pl-3">
-                          <div className="flex items-start">
-                            <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-medium">
-                              Correction {idx + 1}
-                            </span>
-                          </div>
-                          <div className="mt-2 space-y-2">
-                            <div>
-                              <p className="text-sm text-gray-500">Issue:</p>
-                              <p className="bg-red-50 p-2 rounded text-sm">"{corr.original_phrase}"</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-500">Suggestion:</p>
-                              <p className="bg-green-50 p-2 rounded text-sm">"{corr.suggested_correction}"</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-500">Explanation:</p>
-                              <p className="text-sm">{corr.explanation}</p>
-                            </div>
-                          </div>
+          {(() => {
+            // Filter grammar corrections for the current question
+            const filteredGrammarCorrections = {};
+            
+            Object.entries(grammarCorrections).forEach(([key, correction]) => {
+              // Extract the recording number from the key (assuming keys are in format "sentence_X")
+              const [_, sentenceNum] = key.split('_');
+              const recordingNum = parseInt(sentenceNum) <= (activeAnalysisIndex + 1) * 10 && 
+                                  parseInt(sentenceNum) > activeAnalysisIndex * 10 
+                                  ? activeAnalysisIndex + 1 : null;
+                                  
+              if (recordingNum === activeAnalysisIndex + 1) {
+                filteredGrammarCorrections[key] = correction;
+              }
+            });
+            
+            if (Object.keys(filteredGrammarCorrections).length > 0) {
+              return (
+                <div className="space-y-6">
+                  {Object.entries(filteredGrammarCorrections).map(([key, sentenceCorrection], index) => {
+                  const correction = sentenceCorrection as SentenceCorrection;  
+                    return (
+                      <div key={index} className="bg-white p-4 border rounded-lg shadow-sm">
+                        <h3 className="font-medium text-gray-800 mb-2">
+                          Sentence {key.split('_')[1]}
+                        </h3>
+                        <div className="mb-2">
+                          <p className="text-sm text-gray-500">Original:</p>
+                          <p className="bg-gray-50 p-2 rounded">{correction.original}</p>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="bg-gray-50 p-4 rounded border">
-              <p className="text-gray-600">No grammar corrections available.</p>
-            </div>
-          )}
+                        <div className="space-y-3">
+                          {correction.corrections.map((corr, idx) => (
+                            <div key={idx} className="border-l-4 border-yellow-400 pl-3">
+                              <div className="flex items-start">
+                                <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-medium">
+                                  Correction {idx + 1}
+                                </span>
+                              </div>
+                              <div className="mt-2 space-y-2">
+                                <div>
+                                  <p className="text-sm text-gray-500">Issue:</p>
+                                  <p className="bg-red-50 p-2 rounded text-sm">"{corr.original_phrase}"</p>
+                                </div>
+                                <div>
+                                  <p className="text-sm text-gray-500">Suggestion:</p>
+                                  <p className="bg-green-50 p-2 rounded text-sm">"{corr.suggested_correction}"</p>
+                                </div>
+                                <div>
+                                  <p className="text-sm text-gray-500">Explanation:</p>
+                                  <p className="text-sm">{corr.explanation}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            } else {
+              return (
+                <div className="bg-gray-50 p-4 rounded border">
+                  <p className="text-gray-600">No grammar corrections available for this question.</p>
+                </div>
+              );
+            }
+          })()}
         </div>
       )}
 
+      
+
       {/* Vocabulary Analysis Tab */}
       {activeTab === "vocabulary" && (
-        <div>
-          <h2 className="text-lg font-semibold mb-2">Vocabulary Enhancement</h2>
-          {Object.keys(vocabSuggestions).length > 0 ? (
-            <div className="space-y-6">
-              {Object.entries(vocabSuggestions).map(([key, sentenceVocab], index) => {
-                // Type assertion to tell TypeScript this is a SentenceVocab
-                const suggestion = sentenceVocab as SentenceVocab;
-                return (
-                  <div key={index} className="bg-white p-4 border rounded-lg shadow-sm">
-                    <h3 className="font-medium text-gray-800 mb-2">
-                      Sentence {key.split('_')[1]}
-                    </h3>
-                    <div className="mb-2">
-                      <p className="text-sm text-gray-500">Original:</p>
-                      <p className="bg-gray-50 p-2 rounded">{suggestion.original}</p>
-                    </div>
-                    <div className="space-y-3">
-                      {suggestion.suggestions.map((vocab, idx) => (
-                        <div key={idx} className="border-l-4 border-blue-400 pl-3">
+  <div>
+    <h2 className="text-lg font-semibold mb-2">Vocabulary Enhancement</h2>
+    
+    {/* Vocabulary Suggestions Section */}
+    {(() => {
+      // Filter vocabulary suggestions for the current question
+      const filteredVocabSuggestions = {};
+      
+      Object.entries(vocabSuggestions).forEach(([key, suggestion]) => {
+        // Extract the sentence number from the key
+        const [_, sentenceNum] = key.split('_');
+        const recordingNum = parseInt(sentenceNum) <= (activeAnalysisIndex + 1) * 10 && 
+                            parseInt(sentenceNum) > activeAnalysisIndex * 10 
+                            ? activeAnalysisIndex + 1 : null;
+                            
+        if (recordingNum === activeAnalysisIndex + 1) {
+          filteredVocabSuggestions[key] = suggestion;
+        }
+      });
+      
+      if (Object.keys(filteredVocabSuggestions).length > 0) {
+        return (
+          <div className="space-y-6 mb-8">
+            <h3 className="text-md font-medium text-gray-700 border-b pb-2">Word Choices</h3>
+            {Object.entries(filteredVocabSuggestions).map(([key, sentenceVocab], index) => {
+              // Type assertion to tell TypeScript this is a SentenceVocab
+              const suggestion = sentenceVocab as SentenceVocab;
+              return (
+                <div key={index} className="bg-white p-4 border rounded-lg shadow-sm">
+                  <h3 className="font-medium text-gray-800 mb-2">
+                    Sentence {key.split('_')[1]}
+                  </h3>
+                  <div className="mb-2">
+                    <p className="text-sm text-gray-500">Original:</p>
+                    <p className="bg-gray-50 p-2 rounded">{suggestion.original}</p>
+                  </div>
+                  <div className="space-y-3">
+                    {suggestion.suggestions.map((vocab, idx) => (
+                      <div key={idx} className="border-l-4 border-blue-400 pl-3">
+                        <div className="flex items-start">
+                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
+                            {vocab.level} Level
+                          </span>
+                        </div>
+                        <div className="mt-2 space-y-2">
+                          <div>
+                            <p className="text-sm text-gray-500">Basic Word:</p>
+                            <p className="font-medium">"{vocab.original_word}"</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Context:</p>
+                            <p className="italic text-sm">"{vocab.context}"</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Advanced Alternatives:</p>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {vocab.advanced_alternatives.map((alt, altIdx) => (
+                                <span key={altIdx} className="px-2 py-1 bg-gray-100 rounded-full text-sm">
+                                  {alt}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      } else {
+        return (
+          <div className="bg-gray-50 p-4 rounded border mb-6">
+            <p className="text-gray-600">No vocabulary suggestions available for this question.</p>
+          </div>
+        );
+      }
+    })()}
+    
+    {/* Lexical Resources Section */}
+    {(() => {
+      if (!report.lexical_resources) return null;
+      
+      // Filter lexical resources for the current question
+      const filteredLexicalResources = {};
+      
+      Object.entries(report.lexical_resources).forEach(([key, resource]) => {
+        // Extract the sentence number from the key
+        const [_, sentenceNum] = key.split('_');
+        const recordingNum = parseInt(sentenceNum) <= (activeAnalysisIndex + 1) * 10 && 
+                            parseInt(sentenceNum) > activeAnalysisIndex * 10 
+                            ? activeAnalysisIndex + 1 : null;
+                            
+        if (recordingNum === activeAnalysisIndex + 1) {
+          filteredLexicalResources[key] = resource;
+        }
+      });
+      
+      if (Object.keys(filteredLexicalResources).length > 0) {
+        return (
+          <div className="space-y-6">
+            <h3 className="text-md font-medium text-gray-700 border-b pb-2">Collocations & Idioms</h3>
+            {Object.entries(filteredLexicalResources).map(([key, sentenceLexical], index) => {
+              // Type assertion to tell TypeScript this is a SentenceLexical
+              const lexical = sentenceLexical as SentenceLexical;
+              return (
+                <div key={index} className="bg-white p-4 border rounded-lg shadow-sm">
+                  <h3 className="font-medium text-gray-800 mb-2">
+                    Sentence {key.split('_')[1]}
+                  </h3>
+                  <div className="mb-2">
+                    <p className="text-sm text-gray-500">Original:</p>
+                    <p className="bg-gray-50 p-2 rounded">{lexical.original}</p>
+                  </div>
+                  <div className="space-y-3">
+                    {lexical.suggestions.map((resource, idx) => {
+                      // Choose color based on resource type
+                      let borderColor = "border-purple-400";
+                      let bgColor = "bg-purple-100";
+                      let textColor = "text-purple-800";
+                      
+                      if (resource.resource_type === "collocation") {
+                        borderColor = "border-indigo-400";
+                        bgColor = "bg-indigo-100";
+                        textColor = "text-indigo-800";
+                      } else if (resource.resource_type === "idiom") {
+                        borderColor = "border-amber-400";
+                        bgColor = "bg-amber-100";
+                        textColor = "text-amber-800";
+                      } else if (resource.resource_type === "word usage") {
+                        borderColor = "border-emerald-400";
+                        bgColor = "bg-emerald-100";
+                        textColor = "text-emerald-800";
+                      }
+                      
+                      return (
+                        <div key={idx} className={`border-l-4 ${borderColor} pl-3`}>
                           <div className="flex items-start">
-                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
-                              {vocab.level} Level
+                            <span className={`${bgColor} ${textColor} px-2 py-1 rounded text-xs font-medium capitalize`}>
+                              {resource.resource_type}
                             </span>
                           </div>
                           <div className="mt-2 space-y-2">
                             <div>
-                              <p className="text-sm text-gray-500">Basic Word:</p>
-                              <p className="font-medium">"{vocab.original_word}"</p>
+                              <p className="text-sm text-gray-500">Original Phrase:</p>
+                              <p className="bg-red-50 p-2 rounded text-sm">"{resource.original_phrase}"</p>
                             </div>
                             <div>
-                              <p className="text-sm text-gray-500">Context:</p>
-                              <p className="italic text-sm">"{vocab.context}"</p>
+                              <p className="text-sm text-gray-500">Suggested Phrase:</p>
+                              <p className="bg-green-50 p-2 rounded text-sm">"{resource.suggested_phrase}"</p>
                             </div>
                             <div>
-                              <p className="text-sm text-gray-500">Advanced Alternatives:</p>
-                              <div className="flex flex-wrap gap-2 mt-1">
-                                {vocab.advanced_alternatives.map((alt, altIdx) => (
-                                  <span key={altIdx} className="px-2 py-1 bg-gray-100 rounded-full text-sm">
-                                    {alt}
-                                  </span>
-                                ))}
-                              </div>
+                              <p className="text-sm text-gray-500">Explanation:</p>
+                              <p className="text-sm">{resource.explanation}</p>
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="bg-gray-50 p-4 rounded border">
-              <p className="text-gray-600">No vocabulary suggestions available.</p>
-            </div>
-          )}
-        </div>
-      )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      } else {
+        return (
+          <div className="bg-gray-50 p-4 rounded border">
+            <p className="text-gray-600">No lexical resource analysis available for this question.</p>
+          </div>
+        );
+      }
+    })()}
+  </div>
+)}
 
       {/* Fluency & Coherence Tab */}
       {activeTab === "fluency" && (
@@ -694,15 +904,19 @@ const VoiceTutorReport = ({ data }: { data: AnalysisReport }) => {
 };
 
 
+
+
+
 const StudentSubmissionView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { assignments, submissions } = useClass();
+  const { profile } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisReport | null>(null);
 
   // Find the submission row by React Router param
   const submission = submissions.find((s) => s.id === id);
@@ -736,7 +950,7 @@ const StudentSubmissionView = () => {
 
   // When user clicks "Report," fetch the .json file using the submission_uid
   useEffect(() => {
-    let timeoutId = null;
+    let timeoutId: NodeJS.Timeout | null = null;
     
     const fetchAnalysisResult = async (retryCount = 0, maxRetries = 12) => {
       try {
@@ -785,7 +999,6 @@ const StudentSubmissionView = () => {
       setLoading(false);
     }
     
-    // Cleanup function to cancel any pending timeouts
     return () => {
       if (timeoutId) {
         console.log("Cleaning up - clearing scheduled fetch timeout");
@@ -840,7 +1053,7 @@ const StudentSubmissionView = () => {
                 <div id={`example-${index}`} className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 hidden">
                   <div className="flex items-start mb-2">
                     <div className="bg-blue-100 text-blue-700 text-xs font-medium px-2 py-1 rounded uppercase tracking-wide">
-                      Example Answer
+                      Cue Card
                     </div>
                   </div>
                   <p className="text-sm text-slate-700">{questionData.example}</p>
@@ -887,7 +1100,7 @@ const StudentSubmissionView = () => {
           <h2 className="text-xl font-bold mb-4">Loading Pronunciation Report</h2>
           <p className="text-gray-600 mb-6">
             Please wait while we generate your pronunciation analysis. 
-            This may take up to 2 minutes to complete.
+            This may take up to 30 minutes to complete.
           </p>
           <div className="w-full bg-gray-200 rounded-full h-2.5 mb-6">
             <div className="bg-blue-600 h-2.5 rounded-full animate-pulse"></div>
@@ -931,7 +1144,7 @@ const StudentSubmissionView = () => {
     }
 
     // Pass the data to our VoiceTutorReport component
-    return <VoiceTutorReport data={analysisResult} />;
+    return <VoiceTutorReport data={analysisResult} studentName={profile?.name || "Student"} />;
   };
 
   // Loading placeholder for the initial load
@@ -1021,7 +1234,7 @@ const StudentSubmissionView = () => {
             View Submission
           </Button>
           <Button variant={showReport ? "default" : "outline"} onClick={() => setShowReport(true)}>
-            Pronunciation Report
+            Speaking Report
           </Button>
         </div>
 
