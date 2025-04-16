@@ -1053,7 +1053,7 @@ const StudentSubmissionView = () => {
                 <div id={`example-${index}`} className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 hidden">
                   <div className="flex items-start mb-2">
                     <div className="bg-blue-100 text-blue-700 text-xs font-medium px-2 py-1 rounded uppercase tracking-wide">
-                      Example Answer
+                      Cue Card
                     </div>
                   </div>
                   <p className="text-sm text-slate-700">{questionData.example}</p>
@@ -1100,7 +1100,7 @@ const StudentSubmissionView = () => {
           <h2 className="text-xl font-bold mb-4">Loading Pronunciation Report</h2>
           <p className="text-gray-600 mb-6">
             Please wait while we generate your pronunciation analysis. 
-            This may take up to 2 minutes to complete.
+            This may take up to 30 minutes to complete.
           </p>
           <div className="w-full bg-gray-200 rounded-full h-2.5 mb-6">
             <div className="bg-blue-600 h-2.5 rounded-full animate-pulse"></div>

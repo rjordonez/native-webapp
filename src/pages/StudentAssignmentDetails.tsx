@@ -565,7 +565,7 @@ const StudentAssignmentDetails = () => {
     <div className="border p-6 rounded-lg bg-muted/40 text-left"> {/* Added text-left and p-6 */}
       <p className="text-lg font-semibold">{currentQuestionData.question}</p>
       <div className="mt-4 text-sm text-gray-700"> {/* Increased margin-top (mt-4) for extra spacing */}
-        <span className="font-bold">Example Answer: </span>
+        <span className="font-bold">Cue Card: </span>
         <p>{currentExample}</p>
       </div>
     </div>

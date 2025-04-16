@@ -550,12 +550,12 @@ const CreateAssignment = () => {
         onCheckedChange={setIncludeExamples} 
       />
       <Label htmlFor="includeExamples" className="font-medium">
-        Include example answers for students
+        Include a cue card for students
       </Label>
     </div>
     <p className="text-sm text-muted-foreground">
       {includeExamples 
-        ? "Students will see example answers" 
+        ? "Students will see a cue card" 
         : "Examples will be hidden from students"}
     </p>
   </div>
@@ -625,14 +625,14 @@ const CreateAssignment = () => {
                 <AccordionItem value={`example-${index}`} className="border-none">
                   <AccordionTrigger className="px-4 py-3">
                     {includeExamples 
-                      ? "Example Answer (Optional)" 
-                      : "Example Answer (Hidden from Students)"}
+                      ? "Cue Card (Optional)" 
+                      : "Cue Card (Hidden from Students)"}
                   </AccordionTrigger>
                   <AccordionContent className="px-4 pb-4">
                     <Textarea
                       value={item.example}
                       onChange={(e) => handleExampleChange(index, e.target.value)}
-                      placeholder="Provide a simple example answer that students can reference if needed"
+                      placeholder=""
                       className="resize-none"
                       rows={3}
                     />
