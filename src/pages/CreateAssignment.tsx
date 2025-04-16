@@ -406,7 +406,7 @@ const CreateAssignment = () => {
         ...(includeExamples ? { example: q.example } : {})
       }))
     });
-    
+ 
     // Store in localStorage for potential future retrieval
     localStorage.setItem(`assignment_data_${Date.now()}`, metadataStr);
     
@@ -422,6 +422,7 @@ const CreateAssignment = () => {
     );
       
     // Navigate back to class details
+
     navigate(`/teacher/class/${classId}`);
   };
 
