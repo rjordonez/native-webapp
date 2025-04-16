@@ -140,9 +140,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
         },
       });
-
+  
       if (error) throw error;
-
+  
       if (data.user) {
         // Create user profile in the database
         const { error: profileError } = await supabase
@@ -153,11 +153,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             name,
             role,
           });
-
+  
         if (profileError) {
           console.error("Error creating user profile:", profileError);
           throw profileError;
         }
+        
+        // Add a small delay to allow database to process the insert
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         console.log("Signup successful");
         toast.success("Account created successfully!");
