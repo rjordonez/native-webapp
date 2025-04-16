@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, useEffect } from "react";
 import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { supabase } from "@/integrations/supabase/client";
@@ -176,17 +175,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      // 1. First check if we have a session before attempting to sign out
+      const { data } = await supabase.auth.getSession();
+      
+      if (data.session) {
+        console.log("Session found, signing out...");
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+      } else {
+        console.log("No active session found, cleaning up local state only");
+        // No active session, but clean up the local state anyway
+      }
+      
+      // 2. Always clean up local state regardless of session status
       setUser(null);
       setProfile(null);
       setSession(null);
+      
       console.log("Logout successful");
+      toast.success("Logged out successfully");
     } catch (error: any) {
       console.error("Logout error:", error);
-      toast.error("Logout failed", {
-        description: error.message || "There was an error logging out."
-      });
+      
+      // 3. If there's an AuthSessionMissingError, handle it gracefully
+      if (error.message?.includes("Auth session missing")) {
+        console.log("Session already expired, cleaning up local state");
+        
+        // Clean up the local state anyway to ensure user is fully logged out
+        setUser(null);
+        setProfile(null);
+        setSession(null);
+        
+        toast.success("Logged out successfully");
+      } else {
+        // It's a different error
+        toast.error("Logout failed", {
+          description: error.message || "There was an error logging out."
+        });
+      }
     }
   };
 

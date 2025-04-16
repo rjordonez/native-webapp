@@ -917,7 +917,7 @@ const StudentSubmissionView = () => {
   const [error, setError] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisReport | null>(null);
-
+  const [studentName, setStudentName] = useState<string>("Student");
   // Find the submission row by React Router param
   const submission = submissions.find((s) => s.id === id);
   const assignment = submission
@@ -939,7 +939,28 @@ const StudentSubmissionView = () => {
   }
 
   const hasFeedback = submission.feedback?.reviewed;
-
+  useEffect(() => {
+  if (submission?.studentId) {
+    const fetchStudentName = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('name')
+          .eq('id', submission.studentId)
+          .single();
+        
+        if (error) throw error;
+        if (data) {
+          setStudentName(data.name);
+        }
+      } catch (err) {
+        console.error("Error fetching student name:", err);
+      }
+    };
+    
+    fetchStudentName();
+  }
+}, [submission]);
   // Simulate initial loading (for demo)
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1144,7 +1165,7 @@ const StudentSubmissionView = () => {
     }
 
     // Pass the data to our VoiceTutorReport component
-    return <VoiceTutorReport data={analysisResult} studentName={profile?.name || "Student"} />;
+    return <VoiceTutorReport data={analysisResult} studentName={studentName} />;
   };
 
   // Loading placeholder for the initial load
