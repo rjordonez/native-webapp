@@ -528,13 +528,7 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
             const filteredGrammarCorrections = {};
             
             Object.entries(grammarCorrections).forEach(([key, correction]) => {
-              // Extract the recording number from the key (assuming keys are in format "sentence_X")
-              const [_, sentenceNum] = key.split('_');
-              const recordingNum = parseInt(sentenceNum) <= (activeAnalysisIndex + 1) * 10 && 
-                                  parseInt(sentenceNum) > activeAnalysisIndex * 10 
-                                  ? activeAnalysisIndex + 1 : null;
-                                  
-              if (recordingNum === activeAnalysisIndex + 1) {
+              if (key.startsWith(`recording_${activeAnalysisIndex + 1}_`)) {
                 filteredGrammarCorrections[key] = correction;
               }
             });
@@ -607,13 +601,7 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
       const filteredVocabSuggestions = {};
       
       Object.entries(vocabSuggestions).forEach(([key, suggestion]) => {
-        // Extract the sentence number from the key
-        const [_, sentenceNum] = key.split('_');
-        const recordingNum = parseInt(sentenceNum) <= (activeAnalysisIndex + 1) * 10 && 
-                            parseInt(sentenceNum) > activeAnalysisIndex * 10 
-                            ? activeAnalysisIndex + 1 : null;
-                            
-        if (recordingNum === activeAnalysisIndex + 1) {
+        if (key.startsWith(`recording_${activeAnalysisIndex + 1}_`)) {
           filteredVocabSuggestions[key] = suggestion;
         }
       });
@@ -687,13 +675,7 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
       const filteredLexicalResources = {};
       
       Object.entries(report.lexical_resources).forEach(([key, resource]) => {
-        // Extract the sentence number from the key
-        const [_, sentenceNum] = key.split('_');
-        const recordingNum = parseInt(sentenceNum) <= (activeAnalysisIndex + 1) * 10 && 
-                            parseInt(sentenceNum) > activeAnalysisIndex * 10 
-                            ? activeAnalysisIndex + 1 : null;
-                            
-        if (recordingNum === activeAnalysisIndex + 1) {
+        if (key.startsWith(`recording_${activeAnalysisIndex + 1}_`)) {
           filteredLexicalResources[key] = resource;
         }
       });
