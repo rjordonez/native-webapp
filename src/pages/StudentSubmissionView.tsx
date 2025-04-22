@@ -1,3 +1,4 @@
+import React from "react";
 import { useAuth } from "@/context/AuthContext";
 import posthog from 'posthog-js';
 import { useParams, useNavigate } from "react-router-dom";
@@ -8,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Calendar, MessageSquare, Check, Play, HelpCircle } from "lucide-react";
 import AppNavbar from "@/components/AppNavbar";
 import { format } from "date-fns";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
