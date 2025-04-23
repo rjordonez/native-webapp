@@ -1,3 +1,4 @@
+import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useClass } from "@/context/ClassContext"; 
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,7 @@ import AppNavbar from "@/components/AppNavbar";
 import { PlusCircle, Users, BookOpen, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
-//test
+
 import { Trash2 } from "lucide-react";
 import {
   AlertDialog,
