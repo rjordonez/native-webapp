@@ -1,3 +1,4 @@
+import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useClass } from "@/context/ClassContext"; 
 import { Button } from "@/components/ui/button";
