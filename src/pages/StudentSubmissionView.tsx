@@ -14,6 +14,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Submission } from "@/types/user";
 
 // Voice Tutor Report Component
 // Voice Tutor Report Component
@@ -899,19 +902,69 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
 const StudentSubmissionView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { assignments, submissions } = useClass();
-  const { profile } = useAuth();
+  const { user } = useAuth();
+  const { assignments, submissions, createNewSubmission } = useClass();
+  
+  // Add new state for all submissions related to this assignment
+  const [allSubmissions, setAllSubmissions] = useState<Submission[]>([]);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(id || null);
+  
+  // Find the submission row by React Router param
+  const submission = submissions.find((s) => s.id === selectedSubmissionId) || 
+                    submissions.find((s) => s.id === id);
+  
+  const assignment = submission
+    ? assignments.find((a) => a.id === submission.assignmentId)
+    : undefined;
+    
+  // Add useEffect to load all submissions for this assignment
+  useEffect(() => {
+    if (submission && assignment && user) {
+      // Find all submissions for this assignment and student
+      const relatedSubmissions = submissions.filter(
+        (s) => s.assignmentId === assignment.id && s.studentId === user.id && s.status === "submitted"
+      );
+      
+      // Sort by submission date (newest first)
+      relatedSubmissions.sort((a, b) => {
+        const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+        const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+        return dateB - dateA;
+      });
+      
+      setAllSubmissions(relatedSubmissions);
+      
+      // If we don't have a selected submission ID yet, use the current one
+      if (!selectedSubmissionId) {
+        setSelectedSubmissionId(submission.id);
+      }
+    }
+  }, [submission, assignment, user, submissions]);
+  
+  // Function to handle submission change
+  const handleSubmissionChange = (submissionId: string) => {
+    // Reset analysis result and error when submission changes
+    setAnalysisResult(null);
+    setError(null);
+    setLoading(true); // Set loading true to show loading state
+    setShowReport(false); // Reset to submission view
+    
+    setSelectedSubmissionId(submissionId);
+    // Update the URL without reloading the page
+    navigate(`/student/submission/${submissionId}`, { replace: true });
+    
+    // Add short timeout to allow loading state to show
+    setTimeout(() => {
+      setLoading(false);
+    }, 500);
+  };
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisReport | null>(null);
   const [studentName, setStudentName] = useState<string>("Student");
-  // Find the submission row by React Router param
-  const submission = submissions.find((s) => s.id === id);
-  const assignment = submission
-    ? assignments.find((a) => a.id === submission.assignmentId)
-    : undefined;
+  const [hasFeedback, setHasFeedback] = useState<boolean>(false);
 
   if (!submission || !assignment) {
     return (
@@ -927,38 +980,29 @@ const StudentSubmissionView = () => {
     );
   }
 
-  const hasFeedback = submission.feedback?.reviewed;
   useEffect(() => {
-  if (submission?.studentId) {
-    const fetchStudentName = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('users')
-          .select('name')
-          .eq('id', submission.studentId)
-          .single();
-        
-        if (error) throw error;
-        if (data) {
-          setStudentName(data.name);
+    if (submission?.studentId) {
+      const fetchStudentName = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('users')
+            .select('name')
+            .eq('id', submission.studentId)
+            .single();
+          
+          if (error) throw error;
+          if (data) {
+            setStudentName(data.name);
+          }
+        } catch (err) {
+          console.error("Error fetching student name:", err);
         }
-      } catch (err) {
-        console.error("Error fetching student name:", err);
-      }
-    };
-    
-    fetchStudentName();
-  }
-}, [submission]);
-  // Simulate initial loading (for demo)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, []);
+      };
+      
+      fetchStudentName();
+    }
+  }, [submission]);
 
-  // When user clicks "Report," fetch the .json file using the submission_uid
   useEffect(() => {
     let timeoutId: NodeJS.Timeout | null = null;
     
@@ -1015,7 +1059,12 @@ const StudentSubmissionView = () => {
         clearTimeout(timeoutId);
       }
     };
-  }, [showReport, submission.submission_uid]);
+  }, [showReport, submission.submission_uid, selectedSubmissionId]);
+
+  useEffect(() => {
+    // Recalculate hasFeedback whenever submission changes
+    setHasFeedback(!!submission.feedback?.reviewed);
+  }, [submission]);
   
   // Render the standard audio responses
   // Render the standard audio responses
@@ -1239,12 +1288,53 @@ const StudentSubmissionView = () => {
           </div>
         </div>
 
+        {/* Add this dropdown for submission attempts */}
+        {allSubmissions.length > 1 && (
+          <div className="mb-6">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Attempt:</span>
+              <Select value={selectedSubmissionId} onValueChange={handleSubmissionChange}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Select attempt" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allSubmissions.map((sub, index) => (
+                    <SelectItem key={sub.id} value={sub.id}>
+                      Attempt {allSubmissions.length - index} - {sub.submittedAt 
+                        ? format(new Date(sub.submittedAt), "MMM d, yyyy")
+                        : "Unknown"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+
         <div className="mb-6 flex gap-4">
           <Button variant={!showReport ? "default" : "outline"} onClick={() => setShowReport(false)}>
             View Submission
           </Button>
           <Button variant={showReport ? "default" : "outline"} onClick={() => setShowReport(true)}>
             Speaking Report
+          </Button>
+          <Button 
+            variant="outline" 
+            className="ml-auto bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-300"
+            onClick={async () => {
+              try {
+                const newSubmission = await createNewSubmission(assignment.id);
+                if (newSubmission) {
+                  toast.success("New attempt created!");
+                  navigate(`/student/assignment/${assignment.id}`);
+                }
+              } catch (error) {
+                console.error("Error creating new attempt:", error);
+                toast.error("Failed to create new attempt");
+              }
+            }}
+          >
+            Retry Assignment
           </Button>
         </div>
 

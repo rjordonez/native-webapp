@@ -57,6 +57,7 @@ interface ClassContextType {
   ) => Promise<Submission[]>;
   getClassById: (classId: string) => Promise<Class | null>;
   deleteAssignment: (assignmentId: string) => Promise<boolean>;
+  createNewSubmission: (assignmentId: string) => Promise<Submission | null>;
 }
 
 const ClassContext = createContext<ClassContextType>({
@@ -87,6 +88,7 @@ const ClassContext = createContext<ClassContextType>({
   getAssignmentSubmissions: async () => [],
   getClassById: async () => null,
   deleteAssignment: async () => false,
+  createNewSubmission: async () => null,
   
 });
 
@@ -963,6 +965,64 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   // -----------------------------------------------------
+  // createNewSubmission - For retrying completed assignments
+  // -----------------------------------------------------
+  const createNewSubmission = useCallback(async (assignmentId: string) => {
+    if (!user) return null;
+    
+    try {
+      // Get the assignment to know the number of questions
+      const assignment = assignments.find(a => a.id === assignmentId);
+      if (!assignment) {
+        throw new Error("Assignment not found");
+      }
+      
+      // Create a new submission unique ID
+      const submissionUID = `retry_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      
+      // Create a new submission object
+      const newSubmissionData = {
+        submission_uid: submissionUID,
+        assignment_id: parseInt(assignmentId, 10),
+        student_id: user.id,
+        status: "not_started",
+        answers: assignment.questions.map((_, index) => ({ questionId: index })),
+        submitted_at: null,
+        feedback: null
+      };
+      
+      // Insert into database
+      const { data, error } = await supabase
+        .from("submissions")
+        .insert(newSubmissionData)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Format the returned submission to match our interface
+      const formattedSubmission: Submission = {
+        id: data.id.toString(),
+        submission_uid: data.submission_uid,
+        assignmentId: assignmentId,
+        studentId: user.id,
+        status: data.status as "not_started" | "in_progress" | "submitted",
+        answers: data.answers,
+        submittedAt: data.submitted_at
+      };
+      
+      // Refresh submissions to update the local state
+      await refreshSubmissions();
+      
+      return formattedSubmission;
+    } catch (error) {
+      console.error("Error creating new submission:", error);
+      toast.error("Failed to create new attempt");
+      return null;
+    }
+  }, [user, assignments, refreshSubmissions]);
+
+  // -----------------------------------------------------
   // Final Return
   // -----------------------------------------------------
   return (
@@ -992,6 +1052,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
         getAssignmentSubmissions,
         getClassById,
         deleteAssignment,
+        createNewSubmission,
       }}
     >
       {children}
