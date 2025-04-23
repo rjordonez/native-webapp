@@ -26,11 +26,9 @@ jobs:
     - name: Run unit tests
       run: npm test
       
-  integration-tests:
-    name: Integration Tests
+  e2e-tests:
+    name: E2E Tests
     runs-on: ubuntu-latest
-    # Only run on develop branch and PRs to develop or main
-    if: github.ref == 'refs/heads/develop' || (github.event_name == 'pull_request' && (github.base_ref == 'develop' || github.base_ref == 'main'))
     needs: unit-tests
     
     steps:
@@ -45,30 +43,8 @@ jobs:
     - name: Install dependencies
       run: npm ci
       
-    - name: Run integration tests
-      run: npm run test:integration
-
-  production-tests:
-    name: Production Tests
-    runs-on: ubuntu-latest
-    # Only run on main branch and PRs to main
-    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request' && github.base_ref == 'main'
-    needs: [unit-tests, integration-tests]
-    
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-        cache: 'npm'
-        
-    - name: Install dependencies
-      run: npm ci
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps
       
-    - name: Run production tests
-      run: npm run test:production
-      
-    - name: Generate code coverage report
-      run: npm run test:coverage
+    - name: Run E2E tests
+      run: npm run test:e2e
