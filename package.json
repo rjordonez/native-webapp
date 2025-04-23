@@ -10,8 +10,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "jest",
-    "test:e2e": "playwright test",
-    "test:integration": "jest 'src/tests/integration/.*\\.test\\.(jsx?|tsx?)'"
+    "test:unit": "jest 'src/tests/unit/.*\\.test\\.(jsx?|tsx?)'",
+    "test:integration": "jest 'src/tests/integration/.*\\.test\\.(jsx?|tsx?)'",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

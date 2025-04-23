@@ -24,12 +24,36 @@ jobs:
       run: npm ci
       
     - name: Run unit tests
-      run: npm test
+      run: npm run test:unit
+      
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    # Only run on develop branch and PRs to develop or main
+    if: github.ref == 'refs/heads/develop' || github.event_name == 'pull_request' && (github.base_ref == 'develop' || github.base_ref == 'main')
+    needs: unit-tests
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run integration tests
+      run: jest 'src/tests/integration/.*\\.test\\.(jsx?|tsx?)'
       
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
-    needs: unit-tests
+    # Only run on main branch and PRs to main
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request' && github.base_ref == 'main'
+    needs: [unit-tests, integration-tests]
     
     steps:
     - uses: actions/checkout@v3
