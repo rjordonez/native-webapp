@@ -364,8 +364,6 @@ const StudentAssignmentDetails = () => {
     }
 
     if (isRecording) {
-      // Stop button was clicked - stopRecording handles the rest
-      // The button itself is disabled for the first 5s by the timer effect
       stopRecording(); 
     } else {
       // --- Start Recording ---
@@ -385,14 +383,15 @@ const StudentAssignmentDetails = () => {
       }
       
       recordedChunksRef.current = []; 
-      setRecordingStartTime(Date.now()); // Set start time
+      setRecordingStartTime(Date.now());
       setIsRecording(true);
-      setIsStopDisabled(true); // Initially disable stop button
-      // Do not reset timeLeft here, as it's set when question changes
+      setIsStopDisabled(true);
+      // Reset the timer to the original time limit for this question
+      setTimeLeft(questionTimeLimits[currentQuestionIndex] || DEFAULT_RECORDING_SECONDS);
       mediaRecorderRef.current.start(100); 
       toast.info(`Recording started. Minimum duration: ${MINIMUM_RECORDING_SECONDS} seconds.`);
     }
-  }, [isRecording, stopRecording, audioUrls, currentQuestionIndex, updateSubmission, setCurrentSubmission, setRecordingStartTime, setIsRecording, setIsStopDisabled]);
+  }, [isRecording, stopRecording, audioUrls, currentQuestionIndex, updateSubmission, setCurrentSubmission, setRecordingStartTime, setIsRecording, setIsStopDisabled, questionTimeLimits]);
 
   const goToNextQuestion = useCallback(() => {
     if (assignment && currentQuestionIndex < assignment.questions.length - 1) {

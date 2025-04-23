@@ -8,7 +8,7 @@ import AppNavbar from "@/components/AppNavbar";
 import { PlusCircle, Users, BookOpen, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
-//t
+
 import { Trash2 } from "lucide-react";
 import {
   AlertDialog,
