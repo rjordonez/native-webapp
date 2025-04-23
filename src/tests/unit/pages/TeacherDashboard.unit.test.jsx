@@ -23,7 +23,7 @@ jest.mock('@/components/AppNavbar', () => {
 
 describe('TeacherDashboard', () => {
   const mockNavigate = jest.fn();
-  
+  //test
   // Mock classes data
   const mockClasses = [
     {
