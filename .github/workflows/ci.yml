@@ -46,7 +46,7 @@ jobs:
       run: npm ci
       
     - name: Run integration tests
-      run: jest 'src/tests/integration/.*\\.test\\.(jsx?|tsx?)'
+      run: npm run test:integration
       
   e2e-tests:
     name: E2E Tests
