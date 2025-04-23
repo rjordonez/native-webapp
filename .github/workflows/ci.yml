@@ -30,7 +30,7 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     # Only run on develop branch and PRs to develop or main
-    if: github.ref == 'refs/heads/develop' || github.event_name == 'pull_request' && (github.base_ref == 'develop' || github.base_ref == 'main')
+    if: github.ref == 'refs/heads/develop' || (github.event_name == 'pull_request' && (github.base_ref == 'develop' || github.base_ref == 'main'))
     needs: unit-tests
     
     steps:
