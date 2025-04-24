@@ -153,28 +153,21 @@ const StudentAssignmentDetails = () => {
 
   // Define stopRecording *before* the timer useEffect that uses it
   const stopRecording = useCallback(() => {
-    console.log("stopRecording called. Current recorder state:", mediaRecorderRef.current?.state);
-    console.log("Current isRecording:", isRecording);
-    
     if (mediaRecorderRef.current?.state === 'recording') {
-      console.log("Stopping active recording");
-      mediaRecorderRef.current.stop(); // This will trigger handleStop
+      mediaRecorderRef.current.stop();
     }
     
     // Always reset state consistently regardless of recorder state
     setIsRecording(false);
     setIsStopDisabled(false);
     setRecordingStartTime(null);
-    
-    console.log("Recording state reset in stopRecording");
-  }, []); // Empty dependency array - this function should never change
+  }, []);
 
 
   // Add this useEffect to handle visibility changes
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden && isRecording) {
-        console.log("Tab switched while recording, setting flag");
         stoppedDueToTabSwitchRef.current = true;
         stopRecording();
       }
@@ -196,12 +189,10 @@ const StudentAssignmentDetails = () => {
       try {
         // Clean up any existing recorder first
         if (stream) {
-          console.log("Cleaning up existing stream");
           stream.getTracks().forEach(track => track.stop());
         }
         
         // Request a fresh microphone stream
-        console.log("Requesting new microphone access");
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         
         const recorder = new MediaRecorder(stream);
@@ -210,40 +201,33 @@ const StudentAssignmentDetails = () => {
         const handleDataAvailable = (event: BlobEvent) => {
           if (event.data.size > 0) {
             recordedChunksRef.current.push(event.data);
-            console.log("Received audio data chunk of size:", event.data.size);
           }
         };
         
         // Define recording stop handler
         const handleStop = async () => {
-          console.log("MediaRecorder stop event triggered");
-          
           // Always reset state when recording stops
           setIsRecording(false);
           setIsStopDisabled(false);
           setRecordingStartTime(null);
           
           if (stoppedDueToTabSwitchRef.current) {
-            console.log("Recording stopped due to tab switch");
             toast.info("Recording stopped because you switched tabs");
             stoppedDueToTabSwitchRef.current = false;
           }
           
           // Process recorded data
           const chunks = recordedChunksRef.current;
-          console.log(`Processing ${chunks.length} recorded chunks`);
           
           // Reset the chunks array before processing to avoid duplicate processing
           recordedChunksRef.current = [];
           
           if (chunks.length === 0) {
-            console.warn("No audio data collected during recording");
             return;
           }
           
           // Create audio blob from chunks
           const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-          console.log("Created audio blob of size:", audioBlob.size);
           
           // Upload the recorded audio
           if (assignment && user) {
@@ -251,12 +235,9 @@ const StudentAssignmentDetails = () => {
               setIsUploading(true);
               toast.info("Uploading your recording...");
               
-              console.log("Uploading audio for question:", currentQuestionIndex);
               const audioUrl = await uploadAudio(assignment.id, currentQuestionIndex, audioBlob);
               
               if (audioUrl) {
-                console.log("Upload successful, received URL:", audioUrl);
-                
                 // Update the submission with the new audio URL
                 setCurrentSubmission(prev => {
                   if (!prev) return prev;
@@ -280,7 +261,6 @@ const StudentAssignmentDetails = () => {
                   
                   // Persist this change to the context/backend
                   updateSubmission(updatedSubmission)
-                    .then(() => console.log("Submission status updated to in_progress"))
                     .catch(err => console.error("Failed to update submission status:", err));
                   
                   return updatedSubmission;
@@ -306,7 +286,6 @@ const StudentAssignmentDetails = () => {
         
         // Store the recorder reference
         mediaRecorderRef.current = recorder;
-        console.log("MediaRecorder setup complete");
         
       } catch (error) {
         console.error('Error accessing microphone:', error);
@@ -315,17 +294,13 @@ const StudentAssignmentDetails = () => {
     };
     
     // Initial setup
-    console.log("Setting up initial MediaRecorder");
     setupRecorder();
     
     // Cleanup function
     return () => {
-      console.log("Cleaning up MediaRecorder in useEffect cleanup");
-      
       // Stop any active recording
       if (mediaRecorderRef.current?.state === 'recording') {
         try {
-          console.log("Stopping active recording during cleanup");
           mediaRecorderRef.current.stop();
         } catch (e) {
           console.error("Error stopping recorder during cleanup:", e);
@@ -334,7 +309,6 @@ const StudentAssignmentDetails = () => {
       
       // Release the media stream
       if (stream) {
-        console.log("Releasing media stream tracks");
         stream.getTracks().forEach(track => track.stop());
       }
       
@@ -372,20 +346,11 @@ const StudentAssignmentDetails = () => {
   useEffect(() => {
     let timer: number | undefined;
 
-    // Log current state for debugging
-    console.log("Timer useEffect running with: isRecording=", isRecording, 
-                "recordingStartTime=", recordingStartTime, 
-                "timeLeft=", timeLeft);
-
     if (isRecording) {
       // Verify recordingStartTime exists
       if (recordingStartTime === null) {
-        // This should not happen in normal operation, but handle it gracefully
-        console.error("Error: Recording is active but startTime is null");
-        
         // Create a new start time as recovery
         const recoveryTime = Date.now();
-        console.log("Creating recovery start time:", recoveryTime);
         setRecordingStartTime(recoveryTime);
         
         // Don't start timer until next render when recordingStartTime is set
@@ -396,16 +361,12 @@ const StudentAssignmentDetails = () => {
       const now = Date.now();
       const elapsed = now - recordingStartTime;
       
-      console.log("Current elapsed recording time:", elapsed/1000, "seconds");
-      
       // Check if we need to disable the stop button
       if (elapsed < MINIMUM_RECORDING_SECONDS * 1000) {
         setIsStopDisabled(true);
-        console.log("Stop button disabled - minimum time not reached");
       } else if (isStopDisabled) {
         // Only update if currently disabled to avoid unnecessary renders
         setIsStopDisabled(false);
-        console.log("Stop button enabled - minimum time reached");
       }
 
       // Handle the countdown timer
@@ -423,12 +384,10 @@ const StudentAssignmentDetails = () => {
           // Enable stop button if minimum time reached
           if (currentElapsed >= MINIMUM_RECORDING_SECONDS * 1000 && isStopDisabled) {
             setIsStopDisabled(false);
-            console.log("Stop button enabled in timer interval");
           }
         }, 1000);
       } else {
         // Time has run out
-        console.log("Timer reached 0, stopping recording");
         stopRecording();
       }
     }
@@ -436,7 +395,6 @@ const StudentAssignmentDetails = () => {
     // Cleanup function
     return () => {
       if (timer) {
-        console.log("Clearing timer in useEffect cleanup");
         clearInterval(timer);
       }
     };
@@ -447,7 +405,7 @@ const StudentAssignmentDetails = () => {
     setShowExampleDialog(false);
   }, [currentQuestionIndex]);
 
-  // toggleRecording: Modify to use a more synchronous approach with state updates
+  // toggleRecording function with logs removed
   const toggleRecording = useCallback(() => {
     if (!mediaRecorderRef.current) {
       toast.error('Microphone not ready. Please refresh the page.');
@@ -457,7 +415,6 @@ const StudentAssignmentDetails = () => {
     if (isRecording) {
       // If we're recording, stop it
       if (mediaRecorderRef.current.state === 'recording') {
-        console.log("Stopping recording via toggleRecording");
         mediaRecorderRef.current.stop();
       }
       // Always reset recording state variables to ensure consistency
@@ -468,9 +425,6 @@ const StudentAssignmentDetails = () => {
       // --- Start Recording ---
       // First, ensure any previous recording references are cleared
       recordedChunksRef.current = [];
-      
-      // Important: Set all state in a sequence that ensures proper initialization
-      // Start with recording state as false until everything else is set up
       
       // Reset timer to the question's limit
       const currentTimeLimit = questionTimeLimits[currentQuestionIndex] || DEFAULT_RECORDING_SECONDS;
@@ -495,7 +449,6 @@ const StudentAssignmentDetails = () => {
       if (mediaRecorderRef.current.state === 'inactive') {
         // Set the start time explicitly before starting the recorder
         const newStartTime = Date.now();
-        console.log("Setting recordingStartTime to", newStartTime);
         
         // Begin with stop button disabled
         setIsStopDisabled(true);
@@ -507,7 +460,6 @@ const StudentAssignmentDetails = () => {
         setTimeout(() => {
           // Start the actual recording
           mediaRecorderRef.current?.start(100);
-          console.log("Started recording at", newStartTime);
           
           // Only set isRecording to true after everything else is set up
           setIsRecording(true);
@@ -565,20 +517,11 @@ const StudentAssignmentDetails = () => {
             .map(answer => answer.audioUrl)
             .filter(url => url && url.trim() !== "") as string[];
           
-          console.log("Sending audio URLs to analysis API:", audioUrls);
-          
-          // Verify we have the correct number of URLs
-          if (audioUrls.length !== assignment.questions.length) {
-            console.warn(`Warning: Expected ${assignment.questions.length} URLs but got ${audioUrls.length}`);
-          }
-          
           // Only proceed if we have URLs to send
           if (audioUrls.length > 0) {
             // Send to analysis API
             await sendToAnalysisAPI(audioUrls, updatedSubmission.submission_uid);
-            console.log("Analysis request sent successfully");
           } else {
-            console.error("No audio URLs found to send to analysis API");
             toast.warning("Your submission was saved, but no audio recordings were found for analysis.");
           }
         } catch (apiError) {
