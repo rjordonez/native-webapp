@@ -902,7 +902,7 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
 const StudentSubmissionView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { assignments, submissions, createNewSubmission } = useClass();
   
   // Add new state for all submissions related to this assignment
@@ -919,14 +919,17 @@ const StudentSubmissionView = () => {
     
   // Add useEffect to load all submissions for this assignment
   useEffect(() => {
-    if (submission && assignment && user) {
-      // Find all submissions for this assignment and student
+    if (submission && assignment) {
+      // For teachers viewing a student's submission: show all attempts by this student
+      // For students: show only their own attempts
+      const studentId = submission.studentId;
+      
+      // Find all submissions for this assignment and the relevant student
       const relatedSubmissions = submissions.filter(
-        (s) => s.assignmentId === assignment.id && s.studentId === user.id
+        (s) => s.assignmentId === assignment.id && s.studentId === studentId
       );
       
       // Ensure submissions have attempt numbers
-      // If your backend already provides this, you can skip this step
       const submissionsWithAttempts = relatedSubmissions.map((sub, idx) => ({
         ...sub,
         attempt: sub.attempt || (relatedSubmissions.length - idx) // Fallback if not set
@@ -951,7 +954,7 @@ const StudentSubmissionView = () => {
         setSelectedSubmissionId(submission.id);
       }
     }
-  }, [submission, assignment, user, submissions]);
+  }, [submission, assignment, submissions, selectedSubmissionId]);
   
   // Function to handle submission change
   const handleSubmissionChange = (submissionId: string) => {
@@ -962,8 +965,13 @@ const StudentSubmissionView = () => {
     setShowReport(false); // Reset to submission view
     
     setSelectedSubmissionId(submissionId);
+    
     // Update the URL without reloading the page
-    navigate(`/student/submission/${submissionId}`, { replace: true });
+    // Check if we're in the teacher or student route
+    const isTeacherRoute = window.location.pathname.includes('/teacher/');
+    const basePath = isTeacherRoute ? '/teacher/submission/' : '/student/submission/';
+    
+    navigate(`${basePath}${submissionId}`, { replace: true });
     
     // Add short timeout to allow loading state to show
     setTimeout(() => {
@@ -1331,24 +1339,27 @@ const StudentSubmissionView = () => {
           <Button variant={showReport ? "default" : "outline"} onClick={() => setShowReport(true)}>
             Speaking Report
           </Button>
-          <Button 
-            variant="outline" 
-            className="ml-auto bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-300"
-            onClick={async () => {
-              try {
-                const newSubmission = await createNewSubmission(assignment.id);
-                if (newSubmission) {
-                  toast.success("New attempt created!");
-                  navigate(`/student/assignment/${assignment.id}`);
+          {/* Only show retry button for students */}
+          {profile?.role === 'student' && (
+            <Button 
+              variant="outline" 
+              className="ml-auto bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-300"
+              onClick={async () => {
+                try {
+                  const newSubmission = await createNewSubmission(assignment.id);
+                  if (newSubmission) {
+                    toast.success("New attempt created!");
+                    navigate(`/student/assignment/${assignment.id}`);
+                  }
+                } catch (error) {
+                  console.error("Error creating new attempt:", error);
+                  toast.error("Failed to create new attempt");
                 }
-              } catch (error) {
-                console.error("Error creating new attempt:", error);
-                toast.error("Failed to create new attempt");
-              }
-            }}
-          >
-            Retry Assignment
-          </Button>
+              }}
+            >
+              Retry Assignment
+            </Button>
+          )}
         </div>
 
         {showReport ? renderReportView() : renderSubmissionView()}
