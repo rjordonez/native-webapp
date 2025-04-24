@@ -977,6 +977,22 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
         throw new Error("Assignment not found");
       }
       
+      // Find the highest attempt number for this student and assignment
+      const { data: existingAttempts, error: countError } = await supabase
+        .from("submissions")
+        .select("attempt")
+        .eq("assignment_id", parseInt(assignmentId, 10))
+        .eq("student_id", user.id)
+        .order("attempt", { ascending: false })
+        .limit(1);
+      
+      if (countError) throw countError;
+      
+      // Calculate the next attempt number
+      const nextAttempt = existingAttempts && existingAttempts.length > 0 
+        ? existingAttempts[0].attempt + 1 
+        : 1;
+      
       // Create a new submission unique ID
       const submissionUID = `retry_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
       
@@ -986,9 +1002,12 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
         assignment_id: parseInt(assignmentId, 10),
         student_id: user.id,
         status: "not_started",
-        answers: assignment.questions.map((_, index) => ({ questionId: index })),
+        answers: assignment.questions.map((_, index) => ({ 
+          questionId: index 
+        })),
         submitted_at: null,
-        feedback: null
+        feedback: null,
+        attempt: nextAttempt // Add the attempt number
       };
       
       // Insert into database
@@ -1008,7 +1027,8 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
         studentId: user.id,
         status: data.status as "not_started" | "in_progress" | "submitted",
         answers: data.answers,
-        submittedAt: data.submitted_at
+        submittedAt: data.submitted_at,
+        attempt: data.attempt // Include this if your Submission interface has it
       };
       
       // Refresh submissions to update the local state
