@@ -153,18 +153,21 @@ const StudentAssignmentDetails = () => {
 
   // Define stopRecording *before* the timer useEffect that uses it
   const stopRecording = useCallback(() => {
+    console.log("stopRecording called. Current recorder state:", mediaRecorderRef.current?.state);
+    console.log("Current isRecording:", isRecording);
+    
     if (mediaRecorderRef.current?.state === 'recording') {
+      console.log("Stopping active recording");
       mediaRecorderRef.current.stop(); // This will trigger handleStop
-      setIsRecording(false);
-      // Don't reset timeLeft here, let the next start handle it or the useEffect timer
-      // Don't reset recordingStartTime or isStopDisabled here, handleStop does it
-    } else {
-       // Ensure consistency if called when not recording
-       setIsRecording(false);
-       setIsStopDisabled(false);
-       setRecordingStartTime(null);
     }
-  }, [setIsRecording, setIsStopDisabled, setRecordingStartTime]); // Updated dependencies to include setters used
+    
+    // Always reset state consistently regardless of recorder state
+    setIsRecording(false);
+    setIsStopDisabled(false);
+    setRecordingStartTime(null);
+    
+    console.log("Recording state reset in stopRecording");
+  }, []); // Empty dependency array - this function should never change
 
 
   // Add this useEffect to handle visibility changes
@@ -188,45 +191,73 @@ const StudentAssignmentDetails = () => {
   useEffect(() => {
     let stream: MediaStream | null = null;
     
+    // Create and configure a new MediaRecorder
     const setupRecorder = async () => {
       try {
+        // Clean up any existing recorder first
+        if (stream) {
+          console.log("Cleaning up existing stream");
+          stream.getTracks().forEach(track => track.stop());
+        }
+        
+        // Request a fresh microphone stream
+        console.log("Requesting new microphone access");
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
         const recorder = new MediaRecorder(stream);
         
+        // Define data collection handler
         const handleDataAvailable = (event: BlobEvent) => {
           if (event.data.size > 0) {
             recordedChunksRef.current.push(event.data);
+            console.log("Received audio data chunk of size:", event.data.size);
           }
         };
         
+        // Define recording stop handler
         const handleStop = async () => {
-          // Reset start time and disabled status when stopped
+          console.log("MediaRecorder stop event triggered");
+          
+          // Always reset state when recording stops
+          setIsRecording(false);
+          setIsStopDisabled(false);
           setRecordingStartTime(null);
-          setIsStopDisabled(false); 
-
-          console.log("In handleStop, stoppedDueToTabSwitch is:", stoppedDueToTabSwitchRef.current);
-
+          
           if (stoppedDueToTabSwitchRef.current) {
-            console.log("Showing tab switch notification");
+            console.log("Recording stopped due to tab switch");
             toast.info("Recording stopped because you switched tabs");
             stoppedDueToTabSwitchRef.current = false;
           }
-
+          
+          // Process recorded data
           const chunks = recordedChunksRef.current;
-          recordedChunksRef.current = []; 
-
-          if (chunks.length === 0) return; 
+          console.log(`Processing ${chunks.length} recorded chunks`);
           
+          // Reset the chunks array before processing to avoid duplicate processing
+          recordedChunksRef.current = [];
+          
+          if (chunks.length === 0) {
+            console.warn("No audio data collected during recording");
+            return;
+          }
+          
+          // Create audio blob from chunks
           const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+          console.log("Created audio blob of size:", audioBlob.size);
           
+          // Upload the recorded audio
           if (assignment && user) {
             try {
               setIsUploading(true);
               toast.info("Uploading your recording...");
+              
+              console.log("Uploading audio for question:", currentQuestionIndex);
               const audioUrl = await uploadAudio(assignment.id, currentQuestionIndex, audioBlob);
               
               if (audioUrl) {
-                // Update the current submission with the new audio URL
+                console.log("Upload successful, received URL:", audioUrl);
+                
+                // Update the submission with the new audio URL
                 setCurrentSubmission(prev => {
                   if (!prev) return prev;
                   
@@ -236,18 +267,14 @@ const StudentAssignmentDetails = () => {
                   // Update the current question's audio URL
                   updatedAnswers[currentQuestionIndex] = {
                     ...updatedAnswers[currentQuestionIndex],
-                    questionId: currentQuestionIndex,  // Ensure questionId is set
+                    questionId: currentQuestionIndex,
                     audioUrl: audioUrl
                   };
-                  
-                  // Log the updated state for debugging
-                  console.log(`Updated answer for question ${currentQuestionIndex} with URL: ${audioUrl}`);
-                  console.log("Updated answers array:", updatedAnswers);
                   
                   // Create updated submission object with correct type
                   const updatedSubmission = {
                     ...prev,
-                    status: "in_progress" as const, // Use const assertion to fix the type
+                    status: "in_progress" as const,
                     answers: updatedAnswers
                   };
                   
@@ -258,6 +285,7 @@ const StudentAssignmentDetails = () => {
                   
                   return updatedSubmission;
                 });
+                
                 toast.success("Recording saved successfully!");
               }
             } catch (error) {
@@ -265,34 +293,58 @@ const StudentAssignmentDetails = () => {
               toast.error("Failed to upload recording. Please try again.");
             } finally {
               setIsUploading(false);
+              
+              // Re-setup the recorder to ensure we're ready for the next recording
+              setTimeout(() => setupRecorder(), 100);
             }
           }
         };
-
+        
+        // Register event handlers
         recorder.addEventListener('dataavailable', handleDataAvailable);
         recorder.addEventListener('stop', handleStop);
+        
+        // Store the recorder reference
         mediaRecorderRef.current = recorder;
+        console.log("MediaRecorder setup complete");
         
       } catch (error) {
         console.error('Error accessing microphone:', error);
         toast.error('Could not access your microphone. Please check permissions.');
       }
     };
-
+    
+    // Initial setup
+    console.log("Setting up initial MediaRecorder");
     setupRecorder();
     
+    // Cleanup function
     return () => {
+      console.log("Cleaning up MediaRecorder in useEffect cleanup");
+      
+      // Stop any active recording
       if (mediaRecorderRef.current?.state === 'recording') {
-        try { mediaRecorderRef.current.stop(); } catch (e) { console.error("Cleanup stop error:", e); }
+        try {
+          console.log("Stopping active recording during cleanup");
+          mediaRecorderRef.current.stop();
+        } catch (e) {
+          console.error("Error stopping recorder during cleanup:", e);
+        }
       }
-      if (mediaRecorderRef.current) {
-        mediaRecorderRef.current.stream?.getTracks().forEach(track => track.stop());
+      
+      // Release the media stream
+      if (stream) {
+        console.log("Releasing media stream tracks");
+        stream.getTracks().forEach(track => track.stop());
       }
+      
+      // Clear recording state
       recordedChunksRef.current = [];
-      setRecordingStartTime(null); // Reset on unmount/re-render
+      setRecordingStartTime(null);
       setIsStopDisabled(false);
+      setIsRecording(false);
     };
-  }, [assignment, user, currentQuestionIndex, uploadAudio, updateSubmission, setRecordingStartTime, setIsStopDisabled, setIsUploading, setCurrentSubmission]);
+  }, [assignment, user, currentQuestionIndex, uploadAudio, updateSubmission]);
 
   // Initialize submission
   useEffect(() => {
@@ -320,50 +372,82 @@ const StudentAssignmentDetails = () => {
   useEffect(() => {
     let timer: number | undefined;
 
+    // Log current state for debugging
+    console.log("Timer useEffect running with: isRecording=", isRecording, 
+                "recordingStartTime=", recordingStartTime, 
+                "timeLeft=", timeLeft);
+
     if (isRecording) {
-      // Check elapsed time for disabling stop button
-      const now = Date.now();
-      const elapsed = recordingStartTime ? now - recordingStartTime : 0;
+      // Verify recordingStartTime exists
+      if (recordingStartTime === null) {
+        // This should not happen in normal operation, but handle it gracefully
+        console.error("Error: Recording is active but startTime is null");
+        
+        // Create a new start time as recovery
+        const recoveryTime = Date.now();
+        console.log("Creating recovery start time:", recoveryTime);
+        setRecordingStartTime(recoveryTime);
+        
+        // Don't start timer until next render when recordingStartTime is set
+        return;
+      }
       
+      // Calculate elapsed time
+      const now = Date.now();
+      const elapsed = now - recordingStartTime;
+      
+      console.log("Current elapsed recording time:", elapsed/1000, "seconds");
+      
+      // Check if we need to disable the stop button
       if (elapsed < MINIMUM_RECORDING_SECONDS * 1000) {
         setIsStopDisabled(true);
-      } else {
-         // Once 5 seconds have passed, ensure button is enabled
-        setIsStopDisabled(false); 
+        console.log("Stop button disabled - minimum time not reached");
+      } else if (isStopDisabled) {
+        // Only update if currently disabled to avoid unnecessary renders
+        setIsStopDisabled(false);
+        console.log("Stop button enabled - minimum time reached");
       }
 
-      // Handle countdown timer
+      // Handle the countdown timer
       if (timeLeft > 0) {
+        // Start a new timer
         timer = window.setInterval(() => {
-          setTimeLeft(prev => prev - 1);
-          // Re-check elapsed time every second within the timer as well
+          setTimeLeft(prev => {
+            // Prevent going below zero
+            return Math.max(0, prev - 1);
+          });
+          
+          // Re-check elapsed time on each tick
           const currentElapsed = recordingStartTime ? Date.now() - recordingStartTime : 0;
-           if (currentElapsed >= MINIMUM_RECORDING_SECONDS * 1000 && isStopDisabled) {
-              setIsStopDisabled(false);
-           }
+          
+          // Enable stop button if minimum time reached
+          if (currentElapsed >= MINIMUM_RECORDING_SECONDS * 1000 && isStopDisabled) {
+            setIsStopDisabled(false);
+            console.log("Stop button enabled in timer interval");
+          }
         }, 1000);
       } else {
-        // Time ran out, stop recording
-        console.log("Timer reached 0, stopping recording.");
-        stopRecording(); // Now stopRecording is defined
+        // Time has run out
+        console.log("Timer reached 0, stopping recording");
+        stopRecording();
       }
-    } else {
-      // Ensure button is not disabled if not recording
-      setIsStopDisabled(false);
     }
     
+    // Cleanup function
     return () => {
-      if (timer) clearInterval(timer);
+      if (timer) {
+        console.log("Clearing timer in useEffect cleanup");
+        clearInterval(timer);
+      }
     };
-  // Dependencies include states checked/set inside
-  }, [isRecording, timeLeft, recordingStartTime, stopRecording, setIsStopDisabled, isStopDisabled, setTimeLeft]); // Added setTimeLeft
+  }, [isRecording, timeLeft, recordingStartTime, isStopDisabled, stopRecording]);
 
   // Close example dialog when changing questions
   useEffect(() => {
     setShowExampleDialog(false);
   }, [currentQuestionIndex]);
 
-  // toggleRecording: Sets start time or calls stopRecording
+  // toggleRecording: Modify to use a more synchronous approach with state updates
   const toggleRecording = useCallback(() => {
     if (!mediaRecorderRef.current) {
       toast.error('Microphone not ready. Please refresh the page.');
@@ -371,9 +455,27 @@ const StudentAssignmentDetails = () => {
     }
 
     if (isRecording) {
-      stopRecording(); 
+      // If we're recording, stop it
+      if (mediaRecorderRef.current.state === 'recording') {
+        console.log("Stopping recording via toggleRecording");
+        mediaRecorderRef.current.stop();
+      }
+      // Always reset recording state variables to ensure consistency
+      setIsRecording(false);
+      setIsStopDisabled(false);
+      setRecordingStartTime(null);
     } else {
       // --- Start Recording ---
+      // First, ensure any previous recording references are cleared
+      recordedChunksRef.current = [];
+      
+      // Important: Set all state in a sequence that ensures proper initialization
+      // Start with recording state as false until everything else is set up
+      
+      // Reset timer to the question's limit
+      const currentTimeLimit = questionTimeLimits[currentQuestionIndex] || DEFAULT_RECORDING_SECONDS;
+      setTimeLeft(currentTimeLimit);
+      
       // Clear previous audio URL if any
       if (audioUrls[currentQuestionIndex]) {
         setCurrentSubmission(prev => {
@@ -389,16 +491,35 @@ const StudentAssignmentDetails = () => {
         });
       }
       
-      recordedChunksRef.current = []; 
-      setRecordingStartTime(Date.now());
-      setIsRecording(true);
-      setIsStopDisabled(true);
-      // Reset the timer to the original time limit for this question
-      setTimeLeft(questionTimeLimits[currentQuestionIndex] || DEFAULT_RECORDING_SECONDS);
-      mediaRecorderRef.current.start(100); 
-      toast.info(`Recording started. Minimum duration: ${MINIMUM_RECORDING_SECONDS} seconds.`);
+      // Only start recording if the mediaRecorder is in the correct state
+      if (mediaRecorderRef.current.state === 'inactive') {
+        // Set the start time explicitly before starting the recorder
+        const newStartTime = Date.now();
+        console.log("Setting recordingStartTime to", newStartTime);
+        
+        // Begin with stop button disabled
+        setIsStopDisabled(true);
+        
+        // Set the recording start time
+        setRecordingStartTime(newStartTime);
+        
+        // Create a small delay to ensure state updates have completed
+        setTimeout(() => {
+          // Start the actual recording
+          mediaRecorderRef.current?.start(100);
+          console.log("Started recording at", newStartTime);
+          
+          // Only set isRecording to true after everything else is set up
+          setIsRecording(true);
+          
+          toast.info(`Recording started. Minimum duration: ${MINIMUM_RECORDING_SECONDS} seconds.`);
+        }, 50); // Small delay to ensure state updates
+      } else {
+        console.error("MediaRecorder in unexpected state:", mediaRecorderRef.current.state);
+        toast.error("Recording error. Please refresh the page and try again.");
+      }
     }
-  }, [isRecording, stopRecording, audioUrls, currentQuestionIndex, updateSubmission, setCurrentSubmission, setRecordingStartTime, setIsRecording, setIsStopDisabled, questionTimeLimits]);
+  }, [isRecording, audioUrls, currentQuestionIndex, updateSubmission, questionTimeLimits]);
 
   const goToNextQuestion = useCallback(() => {
     if (assignment && currentQuestionIndex < assignment.questions.length - 1) {
