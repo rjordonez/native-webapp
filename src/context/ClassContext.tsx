@@ -449,20 +449,59 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
       if (!user) return;
   
       try {
-        // Check if a submission already exists for this assignment and student
-        const { data: existingData } = await supabase
+        // Check if this submission ID already exists and is submitted
+        const { data: existingSubmission } = await supabase
           .from("submissions")
-          .select("id")
-          .eq("assignment_id", parseInt(submission.assignmentId, 10))
-          .eq("student_id", submission.studentId)
+          .select("id, status, attempt")
+          .eq("id", submission.id)
           .maybeSingle();
   
-        if (existingData) {
+        // If the submission exists and is "submitted", create a new submission instead of updating
+        if (existingSubmission && existingSubmission.status === "submitted") {
+          // This is a new attempt on an already submitted assignment
+          // Get the highest attempt number for this assignment and student
+          const { data: highestAttempt } = await supabase
+            .from("submissions")
+            .select("attempt")
+            .eq("assignment_id", parseInt(submission.assignmentId, 10))
+            .eq("student_id", submission.studentId)
+            .order("attempt", { ascending: false })
+            .limit(1);
+          
+          const nextAttempt = (highestAttempt && highestAttempt.length > 0) 
+            ? highestAttempt[0].attempt + 1 
+            : 1;
+          
+          // Create a new unique submission ID
+          const newSubmissionUID = `unique_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+          
+          // Insert a new submission row
+          const { error } = await supabase
+            .from("submissions")
+            .insert({
+              submission_uid: newSubmissionUID,
+              assignment_id: parseInt(submission.assignmentId, 10),
+              student_id: submission.studentId,
+              status: "in_progress", // Always start as in_progress
+              answers: submission.answers,
+              submitted_at: null, // Not submitted yet
+              feedback: null, // No feedback yet
+              attempt: nextAttempt
+            });
+  
+          if (error) throw error;
+          
+          toast.success("Created a new attempt for this assignment");
+          await refreshSubmissions();
+          return;
+        }
+  
+        // Otherwise, update the existing submission as normal
+        if (existingSubmission) {
           // Update existing submission
           const { error } = await supabase
             .from("submissions")
             .update({
-              submission_uid: submission.submission_uid,
               status: submission.status,
               answers: submission.answers,
               submitted_at:
@@ -471,10 +510,23 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
                   : null,
               feedback: submission.feedback,
             })
-            .eq("id", existingData.id);
+            .eq("id", submission.id);
   
           if (error) throw error;
         } else {
+          // Find the highest attempt number for this assignment and student
+          const { data: highestAttempt } = await supabase
+            .from("submissions")
+            .select("attempt")
+            .eq("assignment_id", parseInt(submission.assignmentId, 10))
+            .eq("student_id", submission.studentId)
+            .order("attempt", { ascending: false })
+            .limit(1);
+          
+          const nextAttempt = (highestAttempt && highestAttempt.length > 0) 
+            ? highestAttempt[0].attempt + 1 
+            : 1;
+  
           // Insert new submission
           const { error } = await supabase
             .from("submissions")
@@ -489,6 +541,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
                   ? new Date().toISOString()
                   : null,
               feedback: submission.feedback,
+              attempt: nextAttempt
             });
   
           if (error) throw error;

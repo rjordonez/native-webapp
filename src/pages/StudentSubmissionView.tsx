@@ -922,17 +922,29 @@ const StudentSubmissionView = () => {
     if (submission && assignment && user) {
       // Find all submissions for this assignment and student
       const relatedSubmissions = submissions.filter(
-        (s) => s.assignmentId === assignment.id && s.studentId === user.id && s.status === "submitted"
+        (s) => s.assignmentId === assignment.id && s.studentId === user.id
       );
       
-      // Sort by submission date (newest first)
-      relatedSubmissions.sort((a, b) => {
+      // Ensure submissions have attempt numbers
+      // If your backend already provides this, you can skip this step
+      const submissionsWithAttempts = relatedSubmissions.map((sub, idx) => ({
+        ...sub,
+        attempt: sub.attempt || (relatedSubmissions.length - idx) // Fallback if not set
+      }));
+      
+      // Sort by attempt number (newest first)
+      submissionsWithAttempts.sort((a, b) => {
+        // First try to sort by attempt number
+        if (a.attempt && b.attempt) {
+          return b.attempt - a.attempt;
+        }
+        // Otherwise sort by submission date
         const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
         const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
         return dateB - dateA;
       });
       
-      setAllSubmissions(relatedSubmissions);
+      setAllSubmissions(submissionsWithAttempts);
       
       // If we don't have a selected submission ID yet, use the current one
       if (!selectedSubmissionId) {
@@ -1300,9 +1312,10 @@ const StudentSubmissionView = () => {
                 <SelectContent>
                   {allSubmissions.map((sub, index) => (
                     <SelectItem key={sub.id} value={sub.id}>
-                      Attempt {allSubmissions.length - index} - {sub.submittedAt 
-                        ? format(new Date(sub.submittedAt), "MMM d, yyyy")
-                        : "Unknown"}
+                      Attempt {sub.attempt || (allSubmissions.length - index)} - 
+                      {sub.status === "submitted" ? 
+                        (sub.submittedAt ? format(new Date(sub.submittedAt), "MMM d, yyyy") : "Submitted") : 
+                        "In Progress"}
                     </SelectItem>
                   ))}
                 </SelectContent>
