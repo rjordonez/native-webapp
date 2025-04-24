@@ -58,6 +58,7 @@ const StudentAssignmentDetails = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
   const [questionExamples, setQuestionExamples] = useState<string[]>([]);
+  const [shouldShowCueCard, setShouldShowCueCard] = useState(true);
 
   
   const assignment = useMemo(() => assignments.find(a => a.id === id), [assignments, id]);
@@ -85,11 +86,17 @@ const StudentAssignmentDetails = () => {
           const timeLimits = metadata.questionsWithTimeLimits.map(q => 
             parseInt(q.timeLimit, 10) || DEFAULT_RECORDING_SECONDS
           );
-          // Extract examples for each question
+          
+          // Check if any question has examples - if they do, the teacher enabled cue cards
+          // If no examples exist in the metadata, then the teacher disabled cue cards
+          const hasAnyExamples = metadata.questionsWithTimeLimits.some(q => q.example !== undefined);
+          setShouldShowCueCard(hasAnyExamples);
+          
+          // Extract examples for each question (empty string if no example)
           const examples = metadata.questionsWithTimeLimits.map(q => q.example || "");
           
           setQuestionTimeLimits(timeLimits);
-          setQuestionExamples(examples);  // <<=== NEW: set examples from metadata
+          setQuestionExamples(examples);
           
           // Set initial time limit for the first question
           if (timeLimits.length > 0) {
@@ -560,13 +567,17 @@ const StudentAssignmentDetails = () => {
     <span>Question {currentQuestionIndex + 1} of {assignment.questions.length}</span>
   </CardTitle>
   <CardContent className="flex flex-col gap-8 p-6">
-    {/* First section: Cue Card title, question, and example text */}
+    {/* First section: Question text and optionally cue card */}
     <div className="border rounded-lg p-6 bg-muted/40">
-      <h2 className="text-2xl font-bold mb-4">Cue Card</h2>
+      {shouldShowCueCard ? (
+        <h2 className="text-2xl font-bold mb-4">Cue Card</h2>
+      ) : (
+        <h2 className="text-2xl font-bold mb-4">Question</h2>
+      )}
       
       <p className="text-xl font-semibold mb-4">{currentQuestionData.question}</p>
       
-      {hasExample && (
+      {shouldShowCueCard && hasExample && (
         <div className="mt-4">
           <ul className="list-disc pl-5 space-y-1">
             {currentExample.split('\n').map((line, i) => (
