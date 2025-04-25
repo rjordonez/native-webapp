@@ -57,6 +57,7 @@ interface ClassContextType {
   ) => Promise<Submission[]>;
   getClassById: (classId: string) => Promise<Class | null>;
   deleteAssignment: (assignmentId: string) => Promise<boolean>;
+  createNewSubmission: (assignmentId: string) => Promise<Submission | null>;
 }
 
 const ClassContext = createContext<ClassContextType>({
@@ -87,6 +88,7 @@ const ClassContext = createContext<ClassContextType>({
   getAssignmentSubmissions: async () => [],
   getClassById: async () => null,
   deleteAssignment: async () => false,
+  createNewSubmission: async () => null,
   
 });
 
@@ -445,34 +447,76 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
   const updateSubmission = useCallback(
     async (submission: Submission) => {
       if (!user) return;
-  
+
       try {
-        // Check if a submission already exists for this assignment and student
-        const { data: existingData } = await supabase
-          .from("submissions")
-          .select("id")
-          .eq("assignment_id", parseInt(submission.assignmentId, 10))
-          .eq("student_id", submission.studentId)
-          .maybeSingle();
-  
-        if (existingData) {
-          // Update existing submission
+        // Check if this is a temporary ID (starts with "temp_")
+        const isTemporarySubmission = submission.id.startsWith("temp_");
+        let existingSubmission = null;
+        
+        // Only query the database if it's not a temporary ID
+        if (!isTemporarySubmission) {
+          const { data: existingData } = await supabase
+            .from("submissions")
+            .select("id, status, attempt")
+            .eq("id", submission.id)
+            .maybeSingle();
+          
+          existingSubmission = existingData;
+        }
+
+        // If the submission exists and is "submitted", create a new submission instead of updating
+        if (existingSubmission && existingSubmission.status === "submitted") {
+          // This is a new attempt on an already submitted assignment
+          // Get the highest attempt number for this assignment and student
+          const { data: highestAttempt } = await supabase
+            .from("submissions")
+            .select("attempt")
+            .eq("assignment_id", parseInt(submission.assignmentId, 10))
+            .eq("student_id", submission.studentId)
+            .order("attempt", { ascending: false })
+            .limit(1);
+          
+          const nextAttempt = (highestAttempt && highestAttempt.length > 0) 
+            ? highestAttempt[0].attempt + 1 
+            : 1;
+          
+          // Create a new unique submission ID
+          const newSubmissionUID = `unique_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+          
+          // Insert a new submission row
           const { error } = await supabase
             .from("submissions")
-            .update({
-              submission_uid: submission.submission_uid,
-              status: submission.status,
+            .insert({
+              submission_uid: newSubmissionUID,
+              assignment_id: parseInt(submission.assignmentId, 10),
+              student_id: submission.studentId,
+              status: "in_progress", // Always start as in_progress
               answers: submission.answers,
-              submitted_at:
-                submission.status === "submitted"
-                  ? new Date().toISOString()
-                  : null,
-              feedback: submission.feedback,
-            })
-            .eq("id", existingData.id);
-  
+              submitted_at: null, // Not submitted yet
+              feedback: null, // No feedback yet
+              attempt: nextAttempt
+            });
+
           if (error) throw error;
-        } else {
+          
+          toast.success("Created a new attempt for this assignment");
+          await refreshSubmissions();
+          return;
+        } else if (isTemporarySubmission) {
+          // This is a brand new submission with a temporary ID, so just insert it
+          // Find the highest attempt number for this assignment and student
+          const { data: highestAttempt } = await supabase
+            .from("submissions")
+            .select("attempt")
+            .eq("assignment_id", parseInt(submission.assignmentId, 10))
+            .eq("student_id", submission.studentId)
+            .order("attempt", { ascending: false })
+            .limit(1);
+          
+          const nextAttempt = (highestAttempt && highestAttempt.length > 0) 
+            ? highestAttempt[0].attempt + 1 
+            : 1;
+
           // Insert new submission
           const { error } = await supabase
             .from("submissions")
@@ -487,11 +531,61 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
                   ? new Date().toISOString()
                   : null,
               feedback: submission.feedback,
+              attempt: nextAttempt
             });
-  
+
+          if (error) throw error;
+        } else if (existingSubmission) {
+          // Update existing submission
+          const { error } = await supabase
+            .from("submissions")
+            .update({
+              status: submission.status,
+              answers: submission.answers,
+              submitted_at:
+                submission.status === "submitted"
+                  ? new Date().toISOString()
+                  : null,
+              feedback: submission.feedback,
+            })
+            .eq("id", submission.id);
+
+          if (error) throw error;
+        } else {
+          // Regular insert for non-temporary IDs that don't exist yet
+          // Find the highest attempt number for this assignment and student
+          const { data: highestAttempt } = await supabase
+            .from("submissions")
+            .select("attempt")
+            .eq("assignment_id", parseInt(submission.assignmentId, 10))
+            .eq("student_id", submission.studentId)
+            .order("attempt", { ascending: false })
+            .limit(1);
+          
+          const nextAttempt = (highestAttempt && highestAttempt.length > 0) 
+            ? highestAttempt[0].attempt + 1 
+            : 1;
+
+          // Insert new submission
+          const { error } = await supabase
+            .from("submissions")
+            .insert({
+              submission_uid: submission.submission_uid,
+              assignment_id: parseInt(submission.assignmentId, 10),
+              student_id: submission.studentId,
+              status: submission.status,
+              answers: submission.answers,
+              submitted_at:
+                submission.status === "submitted"
+                  ? new Date().toISOString()
+                  : null,
+              feedback: submission.feedback,
+              attempt: nextAttempt
+            });
+
           if (error) throw error;
         }
-  
+
         // Refresh local state and show a toast
         await refreshSubmissions();
         toast.success(
@@ -963,6 +1057,85 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   // -----------------------------------------------------
+  // createNewSubmission - For retrying completed assignments
+  // -----------------------------------------------------
+  const createNewSubmission = useCallback(async (assignmentId: string) => {
+    if (!user) return null;
+    
+    try {
+      // Get the assignment to know the number of questions
+      const assignment = assignments.find(a => a.id === assignmentId);
+      if (!assignment) {
+        throw new Error("Assignment not found");
+      }
+      
+      // Find the highest attempt number for this student and assignment
+      const { data: existingAttempts, error: countError } = await supabase
+        .from("submissions")
+        .select("attempt")
+        .eq("assignment_id", parseInt(assignmentId, 10))
+        .eq("student_id", user.id)
+        .order("attempt", { ascending: false })
+        .limit(1);
+      
+      if (countError) throw countError;
+      
+      // Calculate the next attempt number
+      const nextAttempt = existingAttempts && existingAttempts.length > 0 
+        ? existingAttempts[0].attempt + 1 
+        : 1;
+      
+      // Create a new submission unique ID
+      const submissionUID = `retry_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      
+      // Create a new submission object
+      const newSubmissionData = {
+        submission_uid: submissionUID,
+        assignment_id: parseInt(assignmentId, 10),
+        student_id: user.id,
+        status: "not_started",
+        answers: assignment.questions.map((_, index) => ({ 
+          questionId: index,
+          audioUrl: "" // Explicitly set to empty string
+        })),
+        submitted_at: null,
+        feedback: null,
+        attempt: nextAttempt
+      };
+      
+      // Insert into database
+      const { data, error } = await supabase
+        .from("submissions")
+        .insert(newSubmissionData)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Format the returned submission to match our interface
+      const formattedSubmission: Submission = {
+        id: data.id.toString(),
+        submission_uid: data.submission_uid,
+        assignmentId: assignmentId,
+        studentId: user.id,
+        status: data.status as "not_started" | "in_progress" | "submitted",
+        answers: data.answers,
+        submittedAt: data.submitted_at,
+        attempt: data.attempt // Include this if your Submission interface has it
+      };
+      
+      // Refresh submissions to update the local state
+      await refreshSubmissions();
+      
+      return formattedSubmission;
+    } catch (error) {
+      console.error("Error creating new submission:", error);
+      toast.error("Failed to create new attempt");
+      return null;
+    }
+  }, [user, assignments, refreshSubmissions]);
+
+  // -----------------------------------------------------
   // Final Return
   // -----------------------------------------------------
   return (
@@ -992,6 +1165,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
         getAssignmentSubmissions,
         getClassById,
         deleteAssignment,
+        createNewSubmission,
       }}
     >
       {children}
