@@ -8,8 +8,8 @@
  */
 export const sendToAnalysisAPI = async (audioUrls: string[], submissionId: string) => {
     try {
-      //const response = await fetch("https://classconnect-107872842385.us-west2.run.app/analyze", {
-      const response = await fetch("http://127.0.0.1:8000/analyze", {
+      const response = await fetch("https://classconnect-107872842385.us-west2.run.app/analyze", {
+      //const response = await fetch("http://127.0.0.1:8000/analyze", {
       //const response = await fetch("http://0.0.0.0:8081/analyze", {
         method: "POST",
         headers: {
