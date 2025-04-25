@@ -44,19 +44,25 @@ jest.mock('@/components/AppNavbar', () => {
 });
 
 // Mock media devices
-Object.defineProperty(window, 'MediaRecorder', {
-  writable: true,
-  value: jest.fn().mockImplementation(() => ({
-    start: jest.fn(),
-    stop: jest.fn(),
-    addEventListener: jest.fn(),
-    stream: { getTracks: () => [{ stop: jest.fn() }] },
-    state: 'inactive',
-  })),
-});
 
+
+// Mock media devices
+// Mock media stream with proper getTracks method
+const mockStream = {
+  getTracks: jest.fn().mockReturnValue([{ stop: jest.fn() }])
+};
+
+// Set up the MediaRecorder mock
+window.MediaRecorder = jest.fn().mockImplementation(() => ({
+  start: jest.fn(),
+  stop: jest.fn(),
+  addEventListener: jest.fn(),
+  state: 'inactive'
+}));
+
+// Mock getUserMedia to return our mock stream
 global.navigator.mediaDevices = {
-  getUserMedia: jest.fn().mockResolvedValue({}),
+  getUserMedia: jest.fn().mockResolvedValue(mockStream)
 };
 
 describe('StudentAssignmentDetails', () => {
@@ -180,15 +186,15 @@ describe('StudentAssignmentDetails', () => {
   test('starts and stops recording', async () => {
     // Set up mocked timers
     jest.useFakeTimers();
-
+  
     // Create a more complete MediaRecorder mock that properly handles events
     const mockStart = jest.fn();
     const mockStop = jest.fn();
     const mockAddEventListener = jest.fn();
-    const mockGetTracks = jest.fn().mockReturnValue([{ stop: jest.fn() }]);
     
     const eventCallbacks = {};
     
+    // Important: Set initial state to 'inactive' not 'recording'
     const mockMediaRecorder = {
       start: mockStart,
       stop: mockStop,
@@ -196,17 +202,14 @@ describe('StudentAssignmentDetails', () => {
         eventCallbacks[event] = callback;
         mockAddEventListener(event, callback);
       },
-      stream: { getTracks: mockGetTracks },
-      state: 'recording'
+      state: 'inactive'  // This should be 'inactive' initially
     };
     
     // Mock the MediaRecorder constructor
     window.MediaRecorder.mockImplementation(() => mockMediaRecorder);
     
-    // Setup getUserMedia to resolve immediately
-    global.navigator.mediaDevices.getUserMedia.mockResolvedValue({
-      getTracks: () => [{ stop: jest.fn() }]
-    });
+    // Setup getUserMedia to resolve immediately with a proper mock stream
+    global.navigator.mediaDevices.getUserMedia.mockResolvedValue(mockStream);
     
     // Render the component
     render(<StudentAssignmentDetails />);
@@ -220,6 +223,11 @@ describe('StudentAssignmentDetails', () => {
     const recordAgainButton = screen.getByText('Record Again');
     fireEvent.click(recordAgainButton);
     
+    // Since we're using timeouts in the component, we need to advance timers
+    act(() => {
+      jest.advanceTimersByTime(100); // Run past the 50ms setTimeout
+    });
+    
     // Verify recording started
     expect(mockStart).toHaveBeenCalled();
     expect(toast.info).toHaveBeenCalledWith(expect.stringContaining('Recording started'));
@@ -229,9 +237,10 @@ describe('StudentAssignmentDetails', () => {
       jest.advanceTimersByTime(5000);
     });
     
-    // Instead of trying to find the stop button by SVG class,
-    // directly call the stop method on the MediaRecorder
+    // Simulate stop - we need to update the state first
     act(() => {
+      // Update state to match what would happen in the browser
+      mockMediaRecorder.state = 'recording';
       // Force the stop method to be called by simulating the timer ending
       jest.advanceTimersByTime(60000);
     });

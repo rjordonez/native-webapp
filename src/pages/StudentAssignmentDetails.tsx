@@ -308,7 +308,7 @@ const StudentAssignmentDetails = () => {
       }
       
       // Release the media stream
-      if (stream) {
+      if (stream && typeof stream.getTracks === 'function') {
         stream.getTracks().forEach(track => track.stop());
       }
       
