@@ -929,23 +929,42 @@ const StudentSubmissionView = () => {
         (s) => s.assignmentId === assignment.id && s.studentId === studentId
       );
       
-      // Ensure submissions have attempt numbers
-      const submissionsWithAttempts = relatedSubmissions.map((sub, idx) => ({
-        ...sub,
-        attempt: sub.attempt || (relatedSubmissions.length - idx) // Fallback if not set
-      }));
-      
-      // Sort by attempt number (newest first)
-      submissionsWithAttempts.sort((a, b) => {
-        // First try to sort by attempt number
-        if (a.attempt && b.attempt) {
-          return b.attempt - a.attempt;
-        }
-        // Otherwise sort by submission date
+      // Sort submissions first by submittedAt date (newest first)
+      relatedSubmissions.sort((a, b) => {
         const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
         const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
         return dateB - dateA;
       });
+      
+      // Ensure submissions have correct attempt numbers
+      // If submission has attempt property, use it
+      // Otherwise, calculate based on submission date (older = lower attempt number)
+      const submissionsWithAttempts = relatedSubmissions.map((sub) => ({
+        ...sub,
+        attempt: sub.attempt || null // Don't set a fallback yet
+      }));
+      
+      // If any submissions are missing attempt numbers, assign them based on date
+      const hasAnyMissingAttempts = submissionsWithAttempts.some(s => s.attempt === null);
+      
+      if (hasAnyMissingAttempts) {
+        // Sort by date for attempt number assignment (oldest first)
+        const sortedForNumbering = [...submissionsWithAttempts].sort((a, b) => {
+          const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : Infinity;
+          const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : Infinity;
+          return dateA - dateB;
+        });
+        
+        // Assign numbers sequentially starting from 1 to oldest submissions
+        sortedForNumbering.forEach((sub, idx) => {
+          if (sub.attempt === null) {
+            sub.attempt = idx + 1;
+          }
+        });
+      }
+      
+      // Final sort by attempt number (newest first)
+      submissionsWithAttempts.sort((a, b) => (b.attempt || 0) - (a.attempt || 0));
       
       setAllSubmissions(submissionsWithAttempts);
       
@@ -1318,9 +1337,9 @@ const StudentSubmissionView = () => {
                   <SelectValue placeholder="Select attempt" />
                 </SelectTrigger>
                 <SelectContent>
-                  {allSubmissions.map((sub, index) => (
+                  {allSubmissions.map((sub) => (
                     <SelectItem key={sub.id} value={sub.id}>
-                      Attempt {sub.attempt || (allSubmissions.length - index)} - 
+                      Attempt {sub.attempt || '?'} - 
                       {sub.status === "submitted" ? 
                         (sub.submittedAt ? format(new Date(sub.submittedAt), "MMM d, yyyy") : "Submitted") : 
                         "In Progress"}
@@ -1352,8 +1371,10 @@ const StudentSubmissionView = () => {
                     navigate(`/student/assignment/${assignment.id}`);
                   }
                 } catch (error) {
-                  console.error("Error creating new attempt:", error);
-                  toast.error("Failed to create new attempt");
+                  console.error("Detailed submission error:", error);
+                  console.error("Error message:", error.message);
+                  console.error("Error details:", error.details);
+                  toast.error("Submission failed. Please try again.");
                 }
               }}
             >

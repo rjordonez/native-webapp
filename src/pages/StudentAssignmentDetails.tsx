@@ -325,9 +325,24 @@ const StudentAssignmentDetails = () => {
     if (!assignment || !user) return;
     
     let submission = submissions.find(
-      s => s.assignmentId === assignment.id && s.studentId === user.id
+      s => s.assignmentId === assignment.id && s.studentId === user.id && s.status !== "submitted"
     );
     
+    // If there's no in-progress submission, look for the newest one
+    if (!submission) {
+      const sortedSubmissions = [...submissions]
+        .filter(s => s.assignmentId === assignment.id && s.studentId === user.id)
+        .sort((a, b) => {
+          // Sort by attempt number descending if available
+          if (a.attempt && b.attempt) return b.attempt - a.attempt;
+          // Otherwise sort by submission ID (assuming higher IDs are newer)
+          return parseInt(b.id) - parseInt(a.id);
+        });
+      
+      submission = sortedSubmissions[0];
+    }
+    
+    // If we still have no submission, create a temporary one
     if (!submission) {
       submission = {
         id: `temp_${Math.random().toString(36).substring(2, 9)}`,
@@ -336,6 +351,17 @@ const StudentAssignmentDetails = () => {
         studentId: user.id,
         status: "not_started" as const,
         answers: assignment.questions.map((_, index) => ({ questionId: index })),
+      };
+    }
+    
+    // IMPORTANT: For retry attempts, ensure there are no audioUrls
+    if (submission.status === "not_started") {
+      submission = {
+        ...submission,
+        answers: submission.answers.map(answer => ({
+          ...answer,
+          audioUrl: undefined // Clear any existing audioUrl
+        }))
       };
     }
     
@@ -658,7 +684,7 @@ const StudentAssignmentDetails = () => {
 
     {/* Second section: Recording UI in a separate container */}
     <div className="border rounded-lg p-6 bg-muted/40 flex flex-col items-center">
-      {audioUrls[currentQuestionIndex] && !isRecording ? (
+      {audioUrls[currentQuestionIndex] && audioUrls[currentQuestionIndex].trim() !== "" ? (
         <div className="w-full">
           <div className="mb-4 text-center text-green-600 font-medium flex items-center justify-center">
             <Check className="mr-2 h-5 w-5" />
