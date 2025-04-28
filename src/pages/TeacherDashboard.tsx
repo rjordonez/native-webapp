@@ -46,6 +46,14 @@ const TeacherDashboard = () => {
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [expandedAssignments, setExpandedAssignments] = useState({});
 
+  // Add this helper function after your state declarations
+  const getUniqueSubmittersCount = (assignmentId) => {
+    // Count unique students who submitted for this assignment
+    const assignmentSubmissions = submissions.filter(s => s.assignmentId === assignmentId && s.status === 'submitted');
+    const uniqueStudentIds = new Set(assignmentSubmissions.map(s => s.studentId));
+    return uniqueStudentIds.size;
+  };
+
   // Toggle assignment expand/collapse
   const toggleAssignment = (assignmentId) => {
     setExpandedAssignments(prev => ({
@@ -262,7 +270,7 @@ const TeacherDashboard = () => {
                         <CardTitle className="flex items-center">
                           {assignment.title}
                           <Badge className="ml-2 bg-blue-100 text-blue-800">
-                            {stats.submitted || 0}/{classDetails.students.length} submitted
+                            {getUniqueSubmittersCount(assignment.id)}/{classDetails.students.length} submitted
                           </Badge>
                         </CardTitle>
                         <CardDescription>
@@ -296,7 +304,7 @@ const TeacherDashboard = () => {
                           <div className="border rounded-lg p-4">
                             <h3 className="text-sm font-medium mb-2">Submitted</h3>
                             <p className="text-xl font-semibold flex items-center gap-1">
-                              <CheckCircle className="text-green-500" size={18} /> {stats.submitted || 0}
+                              <CheckCircle className="text-green-500" size={18} /> {getUniqueSubmittersCount(assignment.id)}
                             </p>
                           </div>
                           <div className="border rounded-lg p-4">
