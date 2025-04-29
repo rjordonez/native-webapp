@@ -329,6 +329,7 @@ const TeacherDashboard = () => {
                                     <TableHead>Student Name</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead>Submitted At</TableHead>
+                                    <TableHead>Score</TableHead>
                                     <TableHead>Action</TableHead>
                                   </TableRow>
                                 </TableHeader>
@@ -378,6 +379,9 @@ const TeacherDashboard = () => {
                                               {submission?.submittedAt ? 
                                                 new Date(submission.submittedAt).toLocaleString() : '-'}
                                             </TableCell>
+                                            <TableCell>
+  {submission?.grade != null ? submission.grade : "Pending"}
+</TableCell>
                                             <TableCell>
                                               {submission?.status === 'submitted' && (
                                                 <Button 

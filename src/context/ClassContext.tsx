@@ -138,7 +138,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
                 reviewed: (s.feedback as { [key: string]: any }).reviewed ?? false,
               }
             : { reviewed: false },
-          submittedAt: s.submitted_at,
+            submittedAt: s.submitted_at,
         }));
         setSubmissions(formattedSubmissions);
         return formattedSubmissions;
@@ -163,10 +163,10 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
     setSubmissionsLoading(true);
     try {
       const { data, error } = await supabase
-        .from("submissions")
-        .select(
-          "id, submission_uid, assignment_id, student_id, status, answers, feedback, submitted_at"
-        )
+  .from("submissions")
+  .select(
+    "id, submission_uid, assignment_id, student_id, status, answers, feedback, submitted_at, grade" // ← added grade
+  )
         .in(
           "assignment_id",
           assignmentIds.map((id) => parseInt(id, 10))
@@ -189,6 +189,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
               }
             : { reviewed: false },
           submittedAt: s.submitted_at,
+          grade: s.grade ?? null,
         }));
         setSubmissions(formattedSubmissions);
         return formattedSubmissions;
@@ -688,10 +689,10 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
         throw new Error("Invalid assignment ID");
       }
       const { data: subsData, error } = await supabase
-        .from("submissions")
-        .select(
-          "id, submission_uid, assignment_id, student_id, status, answers, feedback, submitted_at"
-        )
+  .from("submissions")
+  .select(
+    "id, submission_uid, assignment_id, student_id, status, answers, feedback, submitted_at, grade" // ← added grade
+  )
         .eq("assignment_id", parseInt(assignmentId, 10))
 
       if (error) throw error;
@@ -726,6 +727,7 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({
             }
           : { reviewed: false },
         submittedAt: item.submitted_at,
+        grade: item.grade ?? null,
         // Not in Submission interface by default, but you could store a local "studentName" if you want
         // studentName: nameMap.get(item.student_id),
       }));

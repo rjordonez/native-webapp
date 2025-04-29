@@ -49,6 +49,7 @@ export interface Submission {
     grade?: number;
   };
   attempt?: number;
+  grade?: number | null;
 }
 
 // Mock students to use for submissions display
