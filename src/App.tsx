@@ -25,6 +25,7 @@ import StudentClassView from "./pages/StudentClassView";
 import StudentAssignmentDetails from "./pages/StudentAssignmentDetails";
 import StudentSubmissionView from "./pages/StudentSubmissionView";
 import ClassStudentsView from "./pages/ClassStudentsView";
+import VoiceAnalysisBenchmarkPage from "./pages/VoiceAnalysisBenchmarkPage";
 
 const queryClient = new QueryClient();
 
@@ -158,7 +159,10 @@ const AppRoutes = () => {
           <StudentSubmissionView />
         </ProtectedRoute>
       } />
-      
+      {/* Dev routes */}
+      <Route path="/dev" element={
+          <VoiceAnalysisBenchmarkPage />
+      } /> 
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
