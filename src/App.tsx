@@ -18,7 +18,6 @@ import TeacherDashboard from "./pages/TeacherDashboard";
 import StudentDashboard from "./pages/StudentDashboard";
 import CreateClass from "./pages/CreateClass";
 import JoinClass from "./pages/JoinClass";
-import ClassDetails from "./pages/ClassDetails";
 import CreateAssignment from "./pages/CreateAssignment";
 import AssignmentDetails from "./pages/AssignmentDetails";
 import StudentClassView from "./pages/StudentClassView";
@@ -98,11 +97,6 @@ const AppRoutes = () => {
         </ProtectedRoute>
       } />
       
-      <Route path="/class/:id" element={
-        <ProtectedRoute requiredRole="teacher">
-          <ClassDetails />
-        </ProtectedRoute>
-      } />
       
       <Route path="/class/:id/students" element={
         <ProtectedRoute requiredRole="teacher">
