@@ -2,83 +2,64 @@ name: CI Testing Pipeline
 
 on:
   push:
-    branches: [develop, main]        # Only run on pushes to these branches
+    branches: [develop, main]     
   pull_request:
-    branches: [develop, main]        # And PRs targeting these branches
+    branches: [develop, main]    
 
 jobs:
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v3
-
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18'
-          cache: 'npm'
-
+          node-version: 18
+          cache: npm
       - name: Install dependencies
         run: npm ci
-
       - name: Run unit tests
         run: npm run test:unit
 
   integration-tests:
     name: Integration Tests
+    needs: unit-tests
     runs-on: ubuntu-latest
     if: >-
       github.ref == 'refs/heads/develop' ||
-      (github.event_name == 'pull_request' && (github.base_ref == 'develop' || github.base_ref == 'main'))
-    needs: unit-tests
-
+      (github.event_name == 'pull_request' &&
+       (github.base_ref == 'develop' || github.base_ref == 'main'))
     steps:
       - uses: actions/checkout@v3
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/setup-node@v3
         with:
-          node-version: '18'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run integration tests
-        run: npm run test:integration
+          node-version: 18
+          cache: npm
+      - run: npm ci
+      - run: npm run test:integration
 
   e2e-tests:
     name: E2E Tests
+    needs: [unit-tests, integration-tests]
     runs-on: ubuntu-latest
     if: >-
       github.ref == 'refs/heads/main' ||
       (github.event_name == 'pull_request' && github.base_ref == 'main')
-    needs: [unit-tests, integration-tests]
-
     steps:
       - uses: actions/checkout@v3
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/setup-node@v3
         with:
-          node-version: '18'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-
-      - name: Run E2E tests
-        run: npm run test:e2e
+          node-version: 18
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps
+      - run: npm run test:e2e
 
   deploy-to-vercel:
     name: Deploy to Vercel
-    runs-on: ubuntu-latest
     needs: integration-tests
+    runs-on: ubuntu-latest
     if: >-
       (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
       (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'develop'))
@@ -88,25 +69,26 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel
 
-      - name: Deploy to Vercel (dynamic env)
+      - name: Deploy (dynamic)
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_TOKEN:   ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID:  ${{ secrets.VERCEL_ORG_ID }}  
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           IS_PROD: ${{ github.ref == 'refs/heads/main' }}
         run: |
           if [ "$IS_PROD" = "true" ]; then
             echo "🔵 Deploying to production..."
             vercel \
-              --token $VERCEL_TOKEN \
-              --scope $VERCEL_ORG_ID \
-              --project $VERCEL_PROJECT_ID \
-              --confirm
+              --token   "$VERCEL_TOKEN" \
+              --scope   "$VERCEL_ORG_ID" \
+              --project "$VERCEL_PROJECT_ID" \
+              --confirm \
+              --prod
           else
             echo "🟡 Deploying to preview..."
             vercel \
-              --token $VERCEL_TOKEN \
-              --org $VERCEL_ORG_ID \
-              --project $VERCEL_PROJECT_ID \
+              --token   "$VERCEL_TOKEN" \
+              --scope   "$VERCEL_ORG_ID" \
+              --project "$VERCEL_PROJECT_ID" \
               --confirm
           fi
