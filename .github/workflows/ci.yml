@@ -97,9 +97,9 @@ jobs:
         run: |
           if [ "$IS_PROD" = "true" ]; then
             echo "🔵 Deploying to production..."
-            vercel --prod \
+            vercel \
               --token $VERCEL_TOKEN \
-              --org $VERCEL_ORG_ID \
+              --scope $VERCEL_ORG_ID \
               --project $VERCEL_PROJECT_ID \
               --confirm
           else
