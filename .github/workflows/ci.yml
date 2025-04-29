@@ -61,27 +61,32 @@ jobs:
     needs: integration-tests
     runs-on: ubuntu-latest
     if: >-
-      (github.event_name == 'push' &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
-      (github.event_name == 'pull_request' &&
-      (github.base_ref == 'main' || github.base_ref == 'develop'))
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
+      (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'develop'))
     steps:
       - uses: actions/checkout@v3
 
       - name: Install Vercel CLI
         run: npm install -g vercel
 
-      - name: Deploy (dynamic)
+      - name: Deploy to Vercel (dynamic env)
         env:
-          # Vercel needs these three vars only
-          VERCEL_TOKEN:      ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID:     ${{ secrets.VERCEL_ORG_ID }}     # e.g. rnordones-projects
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }} # e.g. prj_xG9y...
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
+          echo "::debug::ORG=$VERCEL_ORG_ID  PROJ=$VERCEL_PROJECT_ID"
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             echo "🔵 Deploying to production..."
-            vercel --token "$VERCEL_TOKEN" --scope "$VERCEL_ORG_ID" --prod --confirm
+            vercel \
+              --token "$VERCEL_TOKEN" \
+              --scope rnordones-projects \
+              --yes \
+              --prod
           else
             echo "🟡 Deploying to preview..."
-            vercel --token "$VERCEL_TOKEN" --scope "$VERCEL_ORG_ID" --confirm
+            vercel \
+              --token "$VERCEL_TOKEN" \
+              --scope rnordones-projects \
+              --yes
           fi
