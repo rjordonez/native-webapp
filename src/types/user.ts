@@ -1,4 +1,3 @@
-
 export type UserRole = "teacher" | "student";
 
 export interface User {
@@ -49,6 +48,8 @@ export interface Submission {
     reviewed: boolean;
     grade?: number;
   };
+  attempt?: number;
+  grade?: number | null;
 }
 
 // Mock students to use for submissions display

@@ -18,13 +18,13 @@ import TeacherDashboard from "./pages/TeacherDashboard";
 import StudentDashboard from "./pages/StudentDashboard";
 import CreateClass from "./pages/CreateClass";
 import JoinClass from "./pages/JoinClass";
-import ClassDetails from "./pages/ClassDetails";
 import CreateAssignment from "./pages/CreateAssignment";
 import AssignmentDetails from "./pages/AssignmentDetails";
 import StudentClassView from "./pages/StudentClassView";
 import StudentAssignmentDetails from "./pages/StudentAssignmentDetails";
 import StudentSubmissionView from "./pages/StudentSubmissionView";
 import ClassStudentsView from "./pages/ClassStudentsView";
+import VoiceAnalysisBenchmarkPage from "./pages/VoiceAnalysisBenchmarkPage";
 
 const queryClient = new QueryClient();
 
@@ -98,11 +98,6 @@ const AppRoutes = () => {
         </ProtectedRoute>
       } />
       
-      <Route path="/class/:id" element={
-        <ProtectedRoute requiredRole="teacher">
-          <ClassDetails />
-        </ProtectedRoute>
-      } />
       
       <Route path="/class/:id/students" element={
         <ProtectedRoute requiredRole="teacher">
@@ -158,7 +153,10 @@ const AppRoutes = () => {
           <StudentSubmissionView />
         </ProtectedRoute>
       } />
-      
+      {/* Dev routes */}
+      <Route path="/dev" element={
+          <VoiceAnalysisBenchmarkPage />
+      } /> 
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
