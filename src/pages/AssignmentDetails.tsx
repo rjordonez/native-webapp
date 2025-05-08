@@ -1,4 +1,3 @@
-
 import { useParams, useNavigate } from "react-router-dom";
 import { useClass } from "@/context/ClassContext";
 import { mockStudents } from "@/types/user";
@@ -9,13 +8,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, CheckCircle, Clock, XCircle, Eye, AlertCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { useState, useEffect } from "react";
 
 const AssignmentDetails = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { assignments, getSubmissionsByAssignment, getAssignmentStats, loading } = useClass();
+  const [stats, setStats] = useState({ total: 0, submitted: 0, inProgress: 0, notStarted: 0 });
   
   const assignment = assignments.find(a => a.id === id);
+  
+  useEffect(() => {
+    const fetchStats = async () => {
+      if (assignment) {
+        const statsData = await getAssignmentStats(assignment.id);
+        setStats(statsData);
+      }
+    };
+    fetchStats();
+  }, [assignment, getAssignmentStats]);
   
   if (loading) {
     return (
@@ -48,7 +59,6 @@ const AssignmentDetails = () => {
   }
 
   const assignmentSubmissions = getSubmissionsByAssignment(assignment.id);
-  const stats = getAssignmentStats(assignment.id);
   
   // Get student names for each submission
   const submissionsWithStudentNames = assignmentSubmissions.map(submission => {

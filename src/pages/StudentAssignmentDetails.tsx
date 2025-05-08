@@ -59,6 +59,7 @@ const StudentAssignmentDetails = () => {
   const recordedChunksRef = useRef<BlobPart[]>([]);
   const [questionExamples, setQuestionExamples] = useState<string[]>([]);
   const [shouldShowCueCard, setShouldShowCueCard] = useState(true);
+  const [latestRecordingUrl, setLatestRecordingUrl] = useState<string | null>(null);
 
   
   const assignment = useMemo(() => assignments.find(a => a.id === id), [assignments, id]);
@@ -126,8 +127,14 @@ const StudentAssignmentDetails = () => {
   // Derived state for audio URLs
   const audioUrls = useMemo(() => 
     currentSubmission?.answers.map(answer => answer.audioUrl || "") || [],
-    [currentSubmission]
+    [currentSubmission, currentQuestionIndex]
   );
+
+  // Add debug logging for audio URLs
+  useEffect(() => {
+    console.log('Current audio URL:', audioUrls[currentQuestionIndex]);
+  }, [audioUrls, currentQuestionIndex]);
+
   // Parse the question to extract the question text and example
   const currentQuestionData = useMemo(() => {
     if (!assignment || !assignment.questions[currentQuestionIndex]) return { question: "", example: "" };
@@ -151,38 +158,89 @@ const StudentAssignmentDetails = () => {
     return currentQuestionData.example || "";
   }, [currentQuestionData]);
 
-  // Define stopRecording *before* the timer useEffect that uses it
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop();
-    }
-    
-    // Always reset state consistently regardless of recorder state
+  // Add handleRecordingComplete before the useEffect
+  const handleRecordingComplete = async () => {
+    console.log('=== Recording stopped ===');
     setIsRecording(false);
     setIsStopDisabled(false);
     setRecordingStartTime(null);
-  }, []);
-
-
-  // Add this useEffect to handle visibility changes
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden && isRecording) {
-        stoppedDueToTabSwitchRef.current = true;
-        stopRecording();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
     
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [isRecording, stopRecording]);
-  
-  // Setup media recorder
+    if (stoppedDueToTabSwitchRef.current) {
+      toast.info("Recording stopped because you switched tabs");
+      stoppedDueToTabSwitchRef.current = false;
+      return;
+    }
+    
+    // Process recorded data
+    const chunks = recordedChunksRef.current;
+    
+    // Reset the chunks array immediately to avoid duplicate processing
+    recordedChunksRef.current = [];
+    
+    if (chunks.length === 0) {
+      console.warn('No recorded chunks found');
+      return;
+    }
+    
+    // Create audio blob from chunks
+    const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+    console.log('Created audio blob, size:', audioBlob.size);
+    
+    // Upload the recorded audio
+    if (assignment && user) {
+      try {
+        setIsUploading(true);
+        toast.info("Uploading your recording...");
+        
+        const audioUrl = await uploadAudio(assignment.id, currentQuestionIndex, audioBlob);
+        console.log('Audio upload complete, URL:', audioUrl);
+        
+        if (audioUrl) {
+          // Immediately set the latest recording URL to ensure UI updates
+          setLatestRecordingUrl(audioUrl);
+          
+          // Create a new updated submission
+          const updatedSubmission = {
+            ...currentSubmission,
+            status: "in_progress" as const,
+            answers: currentSubmission ? currentSubmission.answers.map((answer, index) => {
+              if (index === currentQuestionIndex) {
+                return {
+                  ...answer,
+                  questionId: currentQuestionIndex,
+                  audioUrl: audioUrl
+                };
+              }
+              return answer;
+            }) : []
+          };
+          
+          // Set the updated submission state
+          setCurrentSubmission(updatedSubmission);
+          
+          // Then persist to the backend
+          try {
+            await updateSubmission(updatedSubmission);
+            toast.success("Recording saved successfully!");
+          } catch (err) {
+            console.error("Failed to update submission status:", err);
+            toast.error("Your recording was uploaded but we couldn't save it. Please try again.");
+          }
+        }
+      } catch (error) {
+        console.error("Error uploading audio:", error);
+        toast.error("Failed to upload recording. Please try again.");
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
+  // Setup media recorder - simplified approach
   useEffect(() => {
-    let stream: MediaStream | null = null;
+    console.log('=== Setting up MediaRecorder ===');
+    let stream = null;
+    let cleanup = false;
     
     // Create and configure a new MediaRecorder
     const setupRecorder = async () => {
@@ -195,94 +253,20 @@ const StudentAssignmentDetails = () => {
         // Request a fresh microphone stream
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         
+        // Check if we've been cleaned up during the async operation
+        if (cleanup) return;
+        
         const recorder = new MediaRecorder(stream);
         
         // Define data collection handler
-        const handleDataAvailable = (event: BlobEvent) => {
+        recorder.addEventListener('dataavailable', (event) => {
           if (event.data.size > 0) {
             recordedChunksRef.current.push(event.data);
           }
-        };
+        });
         
         // Define recording stop handler
-        const handleStop = async () => {
-          // Always reset state when recording stops
-          setIsRecording(false);
-          setIsStopDisabled(false);
-          setRecordingStartTime(null);
-          
-          if (stoppedDueToTabSwitchRef.current) {
-            toast.info("Recording stopped because you switched tabs");
-            stoppedDueToTabSwitchRef.current = false;
-          }
-          
-          // Process recorded data
-          const chunks = recordedChunksRef.current;
-          
-          // Reset the chunks array before processing to avoid duplicate processing
-          recordedChunksRef.current = [];
-          
-          if (chunks.length === 0) {
-            return;
-          }
-          
-          // Create audio blob from chunks
-          const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-          
-          // Upload the recorded audio
-          if (assignment && user) {
-            try {
-              setIsUploading(true);
-              toast.info("Uploading your recording...");
-              
-              const audioUrl = await uploadAudio(assignment.id, currentQuestionIndex, audioBlob);
-              
-              if (audioUrl) {
-                // Update the submission with the new audio URL
-                setCurrentSubmission(prev => {
-                  if (!prev) return prev;
-                  
-                  // Create a deep copy of the answers array
-                  const updatedAnswers = [...prev.answers];
-                  
-                  // Update the current question's audio URL
-                  updatedAnswers[currentQuestionIndex] = {
-                    ...updatedAnswers[currentQuestionIndex],
-                    questionId: currentQuestionIndex,
-                    audioUrl: audioUrl
-                  };
-                  
-                  // Create updated submission object with correct type
-                  const updatedSubmission = {
-                    ...prev,
-                    status: "in_progress" as const,
-                    answers: updatedAnswers
-                  };
-                  
-                  // Persist this change to the context/backend
-                  updateSubmission(updatedSubmission)
-                    .catch(err => console.error("Failed to update submission status:", err));
-                  
-                  return updatedSubmission;
-                });
-                
-                toast.success("Recording saved successfully!");
-              }
-            } catch (error) {
-              console.error("Error uploading audio:", error);
-              toast.error("Failed to upload recording. Please try again.");
-            } finally {
-              setIsUploading(false);
-              
-              // Re-setup the recorder to ensure we're ready for the next recording
-              setTimeout(() => setupRecorder(), 100);
-            }
-          }
-        };
-        
-        // Register event handlers
-        recorder.addEventListener('dataavailable', handleDataAvailable);
-        recorder.addEventListener('stop', handleStop);
+        recorder.addEventListener('stop', handleRecordingComplete);
         
         // Store the recorder reference
         mediaRecorderRef.current = recorder;
@@ -298,7 +282,7 @@ const StudentAssignmentDetails = () => {
     
     // Cleanup function
     return () => {
-      // Stop any active recording
+      cleanup = true;
       if (mediaRecorderRef.current?.state === 'recording') {
         try {
           mediaRecorderRef.current.stop();
@@ -307,18 +291,89 @@ const StudentAssignmentDetails = () => {
         }
       }
       
-      // Release the media stream
-      if (stream && typeof stream.getTracks === 'function') {
+      if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
       
       // Clear recording state
       recordedChunksRef.current = [];
-      setRecordingStartTime(null);
-      setIsStopDisabled(false);
-      setIsRecording(false);
     };
-  }, [assignment, user, currentQuestionIndex, uploadAudio, updateSubmission]);
+  }, []); // Empty dependency array to only run once
+
+  // Simplify the toggleRecording function
+  const toggleRecording = useCallback(() => {
+    if (!mediaRecorderRef.current) {
+      toast.error('Microphone not ready. Please refresh the page.');
+      return;
+    }
+
+    if (isRecording) {
+      // If we're recording, stop it
+      if (mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+      setIsRecording(false);
+      setIsStopDisabled(false);
+      setRecordingStartTime(null);
+    } else {
+      // --- Start Recording ---
+      // Reset timer to the question's limit
+      const currentTimeLimit = questionTimeLimits[currentQuestionIndex] || DEFAULT_RECORDING_SECONDS;
+      setTimeLeft(currentTimeLimit);
+      
+      // Clear the latest recording URL
+      setLatestRecordingUrl(null);
+      
+      // Clear previous audio URL if any - DIRECT APPROACH
+      if (currentSubmission) {
+        const updatedSubmission = {
+          ...currentSubmission,
+          status: "in_progress" as const,
+          answers: currentSubmission.answers.map((answer, index) => {
+            if (index === currentQuestionIndex) {
+              return {
+                ...answer,
+                questionId: currentQuestionIndex,
+                audioUrl: ""
+              };
+            }
+            return answer;
+          })
+        };
+        
+        // Update state
+        setCurrentSubmission(updatedSubmission);
+        
+        // Persist to backend
+        updateSubmission(updatedSubmission)
+          .catch(err => console.error("Failed update:", err));
+      }
+      
+      // Clear recorded chunks
+      recordedChunksRef.current = [];
+      
+      // Begin with stop button disabled
+      setIsStopDisabled(true);
+      
+      // Set the recording start time
+      const newStartTime = Date.now();
+      setRecordingStartTime(newStartTime);
+      
+      // Start recording with a small delay
+      setTimeout(() => {
+        try {
+          mediaRecorderRef.current?.start(100);
+        } catch (error) {
+          console.error('Error starting MediaRecorder:', error);
+          toast.error('Failed to start recording. Please try again.');
+          return;
+        }
+        
+        setIsRecording(true);
+        toast.info(`Recording started. Minimum duration: ${MINIMUM_RECORDING_SECONDS} seconds.`);
+      }, 50);
+    }
+  }, [isRecording, currentSubmission, currentQuestionIndex, updateSubmission, questionTimeLimits]);
 
   // Initialize submission
   useEffect(() => {
@@ -414,7 +469,7 @@ const StudentAssignmentDetails = () => {
         }, 1000);
       } else {
         // Time has run out
-        stopRecording();
+        setIsRecording(false);
       }
     }
     
@@ -424,80 +479,12 @@ const StudentAssignmentDetails = () => {
         clearInterval(timer);
       }
     };
-  }, [isRecording, timeLeft, recordingStartTime, isStopDisabled, stopRecording]);
+  }, [isRecording, timeLeft, recordingStartTime, isStopDisabled]);
 
   // Close example dialog when changing questions
   useEffect(() => {
     setShowExampleDialog(false);
   }, [currentQuestionIndex]);
-
-  // toggleRecording function with logs removed
-  const toggleRecording = useCallback(() => {
-    if (!mediaRecorderRef.current) {
-      toast.error('Microphone not ready. Please refresh the page.');
-      return;
-    }
-
-    if (isRecording) {
-      // If we're recording, stop it
-      if (mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
-      // Always reset recording state variables to ensure consistency
-      setIsRecording(false);
-      setIsStopDisabled(false);
-      setRecordingStartTime(null);
-    } else {
-      // --- Start Recording ---
-      // First, ensure any previous recording references are cleared
-      recordedChunksRef.current = [];
-      
-      // Reset timer to the question's limit
-      const currentTimeLimit = questionTimeLimits[currentQuestionIndex] || DEFAULT_RECORDING_SECONDS;
-      setTimeLeft(currentTimeLimit);
-      
-      // Clear previous audio URL if any
-      if (audioUrls[currentQuestionIndex]) {
-        setCurrentSubmission(prev => {
-          if (!prev) return prev;
-          const updatedAnswers = [...prev.answers];
-          updatedAnswers[currentQuestionIndex] = { ...updatedAnswers[currentQuestionIndex], audioUrl: "" };
-          const updatedSubmission = { ...prev, status: "in_progress" as const, answers: updatedAnswers };
-          const hasAnyRecordings = updatedAnswers.some(a => a.audioUrl && a.audioUrl.trim() !== "");
-          if (hasAnyRecordings) {
-            updateSubmission(updatedSubmission).catch(err => console.error("Failed update:", err));
-          }
-          return updatedSubmission;
-        });
-      }
-      
-      // Only start recording if the mediaRecorder is in the correct state
-      if (mediaRecorderRef.current.state === 'inactive') {
-        // Set the start time explicitly before starting the recorder
-        const newStartTime = Date.now();
-        
-        // Begin with stop button disabled
-        setIsStopDisabled(true);
-        
-        // Set the recording start time
-        setRecordingStartTime(newStartTime);
-        
-        // Create a small delay to ensure state updates have completed
-        setTimeout(() => {
-          // Start the actual recording
-          mediaRecorderRef.current?.start(100);
-          
-          // Only set isRecording to true after everything else is set up
-          setIsRecording(true);
-          
-          toast.info(`Recording started. Minimum duration: ${MINIMUM_RECORDING_SECONDS} seconds.`);
-        }, 50); // Small delay to ensure state updates
-      } else {
-        console.error("MediaRecorder in unexpected state:", mediaRecorderRef.current.state);
-        toast.error("Recording error. Please refresh the page and try again.");
-      }
-    }
-  }, [isRecording, audioUrls, currentQuestionIndex, updateSubmission, questionTimeLimits]);
 
   const goToNextQuestion = useCallback(() => {
     if (assignment && currentQuestionIndex < assignment.questions.length - 1) {
@@ -573,6 +560,38 @@ const StudentAssignmentDetails = () => {
     return (answeredCount / assignment.questions.length) * 100;
   }, [currentSubmission, assignment]);
 
+  // ----------------------------------------------------
+  // ———  ANALYSIS & GROUPING MEMOS  ———————————
+  const analysis = useMemo(() => {
+    if (!currentSubmission?.analysis) return null;
+    return typeof currentSubmission.analysis === "string"
+      ? JSON.parse(currentSubmission.analysis)
+      : currentSubmission.analysis;
+  }, [currentSubmission]);
+
+  // turn file_1, file_2, … into ordered arrays
+  const fileKeys = useMemo(
+    () => (analysis?.grammar_analysis ? Object.keys(analysis.grammar_analysis).sort() : []),
+    [analysis]
+  );
+  const grammarByFile = useMemo(
+    () => fileKeys.map((k) => analysis!.grammar_analysis[k]),
+    [analysis, fileKeys]
+  );
+  const vocabularyByFile = useMemo(
+    () => grammarByFile.map((g) => g.vocabulary_suggestions || {}),
+    [grammarByFile]
+  );
+  const lexicalByFile = useMemo(
+    () => grammarByFile.map((g) => g.lexical_resources || {}),
+    [grammarByFile]
+  );
+  const fluencyByFile = useMemo(
+    () => fileKeys.map((k) => analysis!.fluency_coherence_analysis[k] || {}),
+    [analysis, fileKeys]
+  );
+  // ----------------------------------------------------
+
   // Helper function to format time for display
   const formatTimeDisplay = useCallback((seconds: number): string => {
     if (seconds < 60) {
@@ -587,6 +606,11 @@ const StudentAssignmentDetails = () => {
       return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
     }
   }, []);
+
+  // Clear latestRecordingUrl when changing questions
+  useEffect(() => {
+    setLatestRecordingUrl(null);
+  }, [currentQuestionIndex]);
 
   if (loading || !assignment || !currentSubmission) {
     return (
@@ -607,6 +631,7 @@ const StudentAssignmentDetails = () => {
       </div>
     );
   }
+  
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -684,17 +709,20 @@ const StudentAssignmentDetails = () => {
 
     {/* Second section: Recording UI in a separate container */}
     <div className="border rounded-lg p-6 bg-muted/40 flex flex-col items-center">
-      {audioUrls[currentQuestionIndex] && audioUrls[currentQuestionIndex].trim() !== "" ? (
+      {(audioUrls[currentQuestionIndex] || latestRecordingUrl) ? (
         <div className="w-full">
           <div className="mb-4 text-center text-green-600 font-medium flex items-center justify-center">
             <Check className="mr-2 h-5 w-5" />
             Recording Complete
           </div>
-          <audio 
-            src={audioUrls[currentQuestionIndex]} 
-            controls 
-            className="w-full" 
-          />
+          <div key={`audio-element-${Date.now()}`}>
+            <audio 
+              src={audioUrls[currentQuestionIndex] || latestRecordingUrl} 
+              controls 
+              className="w-full"
+              preload="auto"
+            />
+          </div>
           <div className="mt-4 text-center">
             <Button 
               onClick={toggleRecording}
@@ -773,7 +801,33 @@ const StudentAssignmentDetails = () => {
     )}
   </CardFooter>
 </Card>
-        
+{analysis && grammarByFile.map((g, idx) => (
+  <Card key={idx} className="mb-6">
+    <CardHeader>
+      <CardTitle>Analysis for File {idx + 1}</CardTitle>
+    </CardHeader>
+    <CardContent>
+      {/* if g is somehow missing, show a fallback */}
+      {!g ? (
+        <p>No analysis available for this file.</p>
+      ) : (
+        <>
+          <p><strong>Pronunciation score:</strong> {g.overall_pronunciation_score}</p>
+          
+          <h4 className="mt-4 font-semibold">Grammar corrections</h4>
+          {g.grammar_corrections.length === 0
+            ? <p>—</p>
+            : <ul className="list-disc ml-5">
+                {g.grammar_corrections.map((c, i) => <li key={i}>{c}</li>)}
+              </ul>}
+          
+          {/* …and similarly guard vocabularyByFile[idx], lexicalByFile[idx], fluencyByFile[idx] */}
+        </>
+      )}
+    </CardContent>
+  </Card>
+))}
+
         <div className="flex justify-center mb-8">
           <div className="flex gap-2">
             {assignment.questions.map((_, index) => (
