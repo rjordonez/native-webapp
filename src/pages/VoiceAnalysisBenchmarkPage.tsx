@@ -30,7 +30,6 @@ import {
   Pie,
   Cell
 } from 'recharts';
-import { AlertTriangle } from 'lucide-react';
 
 // Define types
 interface AudioSubmission {
@@ -613,26 +612,21 @@ const VoiceAnalysisBenchmarkPage: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-background">
       <AppNavbar />
       <main className="flex-1 container py-8">
-      <div className="flex justify-between items-center mb-6">
-  <h1 className="text-3xl font-bold">Voice Analysis Benchmarking</h1>
-  <div className="flex gap-2">
-    <Button onClick={() => checkBenchmarkTestStatus(activeTestId!)} variant="outline">
-      Retry Fetch Status
-    </Button>
-    <Button onClick={runAllBenchmarkTests} disabled={runningBatch}>
-      Run All Tests
-    </Button>
-    <Button variant="outline" onClick={resetAllTests} disabled={runningBatch}>
-      Reset Tests
-    </Button>
-    
-    {/* Add your new button here */}
-    <Button onClick={() => navigate('/unfinished-reports')} variant="outline">
-      <AlertTriangle className="mr-2 h-4 w-4" />
-      Check Unfinished Reports
-    </Button>
-  </div>
-</div>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Voice Analysis Benchmarking</h1>
+          <div className="flex gap-2">
+          <Button onClick={() => checkBenchmarkTestStatus(activeTestId!)} variant="outline">
+            Retry Fetch Status
+            </Button>
+
+            <Button onClick={runAllBenchmarkTests} disabled={runningBatch}>
+              Run All Tests
+            </Button>
+            <Button variant="outline" onClick={resetAllTests} disabled={runningBatch}>
+              Reset Tests
+            </Button>
+          </div>
+        </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-4">
@@ -641,7 +635,6 @@ const VoiceAnalysisBenchmarkPage: React.FC = () => {
             <TabsTrigger value="metrics">Metrics</TabsTrigger>
             <TabsTrigger value="grades">Grade Analysis</TabsTrigger>
             <TabsTrigger value="raw">Raw Data</TabsTrigger>
-            
           </TabsList>
           
           {/* Overview Tab */}
