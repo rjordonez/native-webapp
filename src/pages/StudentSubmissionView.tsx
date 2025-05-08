@@ -157,7 +157,21 @@ const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
   return null;
 };
 
-const ExpandableTranscript = ({ text }) => {
+interface ExpandableTranscriptProps { text?: string }
+ const ExpandableTranscript: React.FC<ExpandableTranscriptProps> = ({ text = "" }) => {
+
+  if (!text) {
+    return (
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold mb-2">Transcript</h2>
+        <p className="text-sm text-muted-foreground">
+          Transcript not available for this question.
+        </p>
+      </div>
+    );
+  }
+
+  
   const [isExpanded, setIsExpanded] = useState(false);
   const isLongText = text.length > 100;
   

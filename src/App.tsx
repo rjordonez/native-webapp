@@ -25,6 +25,8 @@ import StudentAssignmentDetails from "./pages/StudentAssignmentDetails";
 import StudentSubmissionView from "./pages/StudentSubmissionView";
 import ClassStudentsView from "./pages/ClassStudentsView";
 import VoiceAnalysisBenchmarkPage from "./pages/VoiceAnalysisBenchmarkPage";
+import UnfinishedReportsPage from "./pages/UnfinishedReports";
+import TeacherClassesPage from "./pages/TeacherClassesPage";
 
 const queryClient = new QueryClient();
 
@@ -157,7 +159,14 @@ const AppRoutes = () => {
       <Route path="/dev" element={
           <VoiceAnalysisBenchmarkPage />
       } /> 
+
+      <Route path="/unfinished-reports" element={<UnfinishedReportsPage />} />
+      <Route path="/teacher-dev" element={<TeacherClassesPage />} />
+
+
+
       <Route path="*" element={<NotFound />} />
+
     </Routes>
   );
 };

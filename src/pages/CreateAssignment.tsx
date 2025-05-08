@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -452,227 +452,25 @@ const CreateAssignment = () => {
     <div className="min-h-screen flex flex-col bg-background">
       <AppNavbar />
       <main className="flex-1 container py-8">
-        <div className="max-w-3xl mx-auto">
-          <Button variant="outline" onClick={() => navigate(-1)} className="mb-6">
-            Back
-          </Button>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>Create Assignment</CardTitle>
-              <CardDescription>
-                Create a new speaking assignment for your students
-              </CardDescription>
-            </CardHeader>
-            <form onSubmit={handleSubmit}>
-
-            <CardContent className="space-y-6">
-  {/* First row - Title and Class (2-column) */}
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div className="space-y-2">
-      <Label htmlFor="title">Assignment Title</Label>
-      <Input
-        id="title"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="Enter a title"
-        required
-      />
-    </div>
-    
-    <div className="space-y-2">
-      <Label htmlFor="class">Assign to Class</Label>
-      <Select value={classId} onValueChange={setClassId}>
-        <SelectTrigger id="class">
-          <SelectValue placeholder="Select a class" />
-        </SelectTrigger>
-        <SelectContent>
-          {teacherClasses.map((c) => (
-            <SelectItem key={c.id} value={c.id}>
-              {c.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  </div>
-  
-  {/* Second row - Topic and Due Date (2-column) */}
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div className="space-y-2">
-      <Label htmlFor="topic">Topic</Label>
-      <Select value={topic} onValueChange={handleTopicChange}>
-        <SelectTrigger id="topic">
-          <SelectValue placeholder="Select a topic" />
-        </SelectTrigger>
-        <SelectContent>
-          {TOPICS.map((t) => (
-            <SelectItem key={t} value={t}>
-              {t}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-    
-    <div className="space-y-2">
-      <Label htmlFor="dueDate">Due Date</Label>
-      <Input
-        id="dueDate"
-        type="date"
-        value={dueDate}
-        onChange={(e) => setDueDate(e.target.value)}
-        min={new Date().toISOString().split('T')[0]}
-        required
-      />
-    </div>
-  </div>
-  
-  {/* Custom Topic Name (conditional, full width) */}
-  {topic === "Custom" && (
-    <div className="space-y-2">
-      <Label htmlFor="customTopicName">Custom Topic Name</Label>
-      <Input
-        id="customTopicName"
-        value={customTopicName}
-        onChange={(e) => setCustomTopicName(e.target.value)}
-        placeholder="Enter a name for your custom topic"
-        required={topic === "Custom"}
-      />
-    </div>
-  )}
-  
-  {/* Include Examples Switch (styled as a card or with borders) */}
-  <div className="flex items-center justify-between p-4 border rounded-md bg-muted/10">
-    <div className="flex items-center space-x-2">
-      <Switch 
-        id="includeExamples" 
-        checked={includeExamples} 
-        onCheckedChange={setIncludeExamples} 
-      />
-      <Label htmlFor="includeExamples" className="font-medium">
-        Include a cue card for students
-      </Label>
-    </div>
-    <p className="text-sm text-muted-foreground">
-      {includeExamples 
-        ? "Students will see a cue card" 
-        : "Examples will be hidden from students"}
-    </p>
-  </div>
-  
-  {/* Questions Section */}
-  <div className="space-y-4">
-    <div className="flex justify-between items-center">
-      <Label className="text-lg font-medium">Questions</Label>
-      <div className="flex gap-2">
-        {!useTemplate && topic !== "Custom" && (
-          <Button type="button" variant="outline" size="sm" onClick={handleResetToTemplate}>
-            Reset to Template
-          </Button>
-        )}
-        <Button type="button" variant="outline" size="sm" onClick={handleAddQuestion}>
-          <Plus size={16} className="mr-2" />
-          Add Question
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => navigate(-1)} 
+          className="mb-6"
+        >
+          <ArrowLeft size={16} className="mr-2" />
+          Back
         </Button>
-      </div>
-    </div>
-    
-    {/* Individual Questions */}
-    <div className="space-y-6">
-      {questionsWithExamples.map((item, index) => (
-        <div key={index} className="border rounded-md p-4 bg-card">
-          <div className="flex gap-3 items-start">
-            <div className="flex-grow space-y-4">
-              {/* Question input and time limit in a responsive layout */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div className="md:col-span-3">
-                  <Label htmlFor={`question-${index}`} className="mb-2 block">
-                    Question {index + 1}
-                  </Label>
-                  <Textarea
-                    id={`question-${index}`}
-                    value={item.question}
-                    onChange={(e) => handleQuestionChange(index, e.target.value)}
-                    placeholder="Enter your question"
-                    className="resize-none"
-                    rows={2}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor={`timeLimit-${index}`} className="mb-2 block">
-                    Time Limit
-                  </Label>
-                  <Select
-                    value={item.timeLimit}
-                    onValueChange={(value) => handleTimeLimitChange(index, value)}
-                  >
-                    <SelectTrigger id={`timeLimit-${index}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TIME_LIMITS.map((time) => (
-                        <SelectItem key={time} value={time}>
-                          {formatTimeDisplay(time)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              {/* Example answer accordion */}
-              <Accordion type="single" collapsible className="border rounded-md bg-background">
-              <AccordionItem value={`example-${index}`} className="border-none">
-                <AccordionTrigger className="px-4 py-3">
-                  {includeExamples 
-                    ? "Cue Card (Optional)" 
-                    : "Cue Card (Hidden from Students)"}
-                </AccordionTrigger>
-                <AccordionContent className="px-4 pb-4">
-                  {/* Replace this Textarea with AutoBulletTextarea */}
-                  <AutoBulletTextarea
-                    value={item.example}
-                    onChange={(value) => handleExampleChange(index, value)}
-                    placeholder="Use '-' at the beginning of a line to create bullet points"
-                    rows={3}
-                  />
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {includeExamples 
-                      ? "Students will have the option to view this example if they're stuck. Use '-' to create bullet points." 
-                      : "This example is for your reference only and won't be shown to students. Use '-' to create bullet points."}
-                  </p>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-            </div>
-            
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={() => handleRemoveQuestion(index)}
-              disabled={questionsWithExamples.length === 1}
-              className="h-10 mt-8"
-            >
-              <Trash2 size={16} />
-            </Button>
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-</CardContent>
-              <CardFooter className="flex justify-between">
-                <Button type="button" variant="outline" onClick={() => navigate(-1)}>
-                  Cancel
-                </Button>
-                <Button type="submit">
-                  Save & Assign
-                </Button>
-              </CardFooter>
-            </form>
-          </Card>
-        </div>
+        
+        <Card>
+          <CardHeader>
+            <CardTitle>Create New Assignment</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {/* Add assignment creation form here */}
+            <p>Assignment creation form coming soon...</p>
+          </CardContent>
+        </Card>
       </main>
     </div>
   );
