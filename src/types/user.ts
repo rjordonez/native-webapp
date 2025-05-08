@@ -50,6 +50,7 @@ export interface Submission {
   };
   attempt?: number;
   grade?: number | null;
+  analysis?: any;
 }
 
 // Mock students to use for submissions display
