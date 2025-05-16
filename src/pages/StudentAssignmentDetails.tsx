@@ -30,6 +30,15 @@ interface AssignmentMetadata {
 const MINIMUM_RECORDING_SECONDS = 5;
 const DEFAULT_RECORDING_SECONDS = 60; // Default if no metadata exists
 
+// Add this type near the top of the file with other interfaces
+interface MediaRecorderWithListeners extends MediaRecorder {
+  eventListeners?: {
+    dataavailable: ((event: BlobEvent) => void)[];
+    stop: (() => void)[];
+    error: ((event: Event) => void)[];
+  };
+}
+
 
 
 
@@ -37,15 +46,15 @@ const StudentAssignmentDetails = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { 
-    assignments, 
-    submissions, 
-    getClassesByUser, 
-    loading, 
+  const {
+    assignments,
+    submissions,
+    getClassesByUser,
+    loading,
     uploadAudio,
-    updateSubmission 
+    updateSubmission
   } = useClass();
-  
+
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [timeLeft, setTimeLeft] = useState(DEFAULT_RECORDING_SECONDS);
@@ -59,12 +68,17 @@ const StudentAssignmentDetails = () => {
   const recordedChunksRef = useRef<BlobPart[]>([]);
   const [questionExamples, setQuestionExamples] = useState<string[]>([]);
   const [shouldShowCueCard, setShouldShowCueCard] = useState(true);
-  const [latestRecordingUrl, setLatestRecordingUrl] = useState<string | null>(null);
+  const [audioPlayerKey, setAudioPlayerKey] = useState(0);
+  const isCleaningUpRef = useRef(false);
+  const hasActiveListenersRef = useRef(false); // Track if we have active listeners
+  const [recorderState, setRecorderState] = useState('inactive');
+  const [lastError, setLastError] = useState<string | null>(null);
+  const recordingIdRef = useRef(0); // To track current recording session
 
-  
+
   const assignment = useMemo(() => assignments.find(a => a.id === id), [assignments, id]);
   const classes = useMemo(() => getClassesByUser(), [getClassesByUser]);
-  const classItem = useMemo(() => 
+  const classItem = useMemo(() =>
     assignment ? classes.find(c => c.id === assignment.classId) : undefined,
     [assignment, classes]
   );
@@ -76,29 +90,29 @@ const StudentAssignmentDetails = () => {
   // Parse assignment metadata when assignment changes
   useEffect(() => {
     if (!assignment) return;
-    
+
     try {
       // Check if metadata exists
       if (assignment.metadata) {
         const metadata = JSON.parse(assignment.metadata) as AssignmentMetadata;
-        
+
         if (metadata.questionsWithTimeLimits) {
           // Extract time limits for each question
-          const timeLimits = metadata.questionsWithTimeLimits.map(q => 
+          const timeLimits = metadata.questionsWithTimeLimits.map(q =>
             parseInt(q.timeLimit, 10) || DEFAULT_RECORDING_SECONDS
           );
-          
+
           // Check if any question has examples - if they do, the teacher enabled cue cards
           // If no examples exist in the metadata, then the teacher disabled cue cards
           const hasAnyExamples = metadata.questionsWithTimeLimits.some(q => q.example !== undefined);
           setShouldShowCueCard(hasAnyExamples);
-          
+
           // Extract examples for each question (empty string if no example)
           const examples = metadata.questionsWithTimeLimits.map(q => q.example || "");
-          
+
           setQuestionTimeLimits(timeLimits);
           setQuestionExamples(examples);
-          
+
           // Set initial time limit for the first question
           if (timeLimits.length > 0) {
             setTimeLeft(timeLimits[0]);
@@ -125,28 +139,22 @@ const StudentAssignmentDetails = () => {
   }, [currentQuestionIndex, questionTimeLimits]);
 
   // Derived state for audio URLs
-  const audioUrls = useMemo(() => 
+  const audioUrls = useMemo(() =>
     currentSubmission?.answers.map(answer => answer.audioUrl || "") || [],
-    [currentSubmission, currentQuestionIndex]
+    [currentSubmission]
   );
-
-  // Add debug logging for audio URLs
-  useEffect(() => {
-    console.log('Current audio URL:', audioUrls[currentQuestionIndex]);
-  }, [audioUrls, currentQuestionIndex]);
-
   // Parse the question to extract the question text and example
   const currentQuestionData = useMemo(() => {
     if (!assignment || !assignment.questions[currentQuestionIndex]) return { question: "", example: "" };
-    
-    return { 
+
+    return {
       question: assignment.questions[currentQuestionIndex],
       example: questionExamples[currentQuestionIndex] || ""
     };
   }, [assignment, currentQuestionIndex, questionExamples]);
 
 
-  
+
 
   // Check if the current question has an example
   const hasExample = useMemo(() => {
@@ -158,231 +166,327 @@ const StudentAssignmentDetails = () => {
     return currentQuestionData.example || "";
   }, [currentQuestionData]);
 
-  // Add handleRecordingComplete before the useEffect
-  const handleRecordingComplete = async () => {
-    console.log('=== Recording stopped ===');
+  // Create a truly reliable cleanup function
+  const cleanupRecordingResources = useCallback(() => {
+    if (isCleaningUpRef.current) {
+      console.log('[DEBUG] Already cleaning up, skipping duplicate cleanup');
+      return;
+    }
+    
+    isCleaningUpRef.current = true;
+    console.log('[DEBUG] Performing complete recording resource cleanup');
+    
+    try {
+      // 1. First, if we have an active MediaRecorder, remove ALL event listeners
+      if (mediaRecorderRef.current) {
+        console.log('[DEBUG] Cleaning up MediaRecorder and its event listeners');
+        
+        // The key problem: we need to explicitly remove event listeners
+        // to prevent them from firing for old MediaRecorder instances
+        if (hasActiveListenersRef.current) {
+          const recorder = mediaRecorderRef.current as MediaRecorderWithListeners;
+          
+          // Remove event listeners explicitly
+          const oldHandlers = recorder.eventListeners;
+          if (oldHandlers) {
+            console.log('[DEBUG] Removing old event listeners');
+            for (const type in oldHandlers) {
+              oldHandlers[type as keyof typeof oldHandlers].forEach(handler => {
+                recorder.removeEventListener(type, handler);
+              });
+            }
+          }
+          
+          hasActiveListenersRef.current = false;
+        }
+        
+        // Stop recording if active
+        if (mediaRecorderRef.current.state === 'recording') {
+          console.log('[DEBUG] Stopping active MediaRecorder');
+          try {
+            mediaRecorderRef.current.stop();
+          } catch (e) {
+            console.error('[DEBUG] Error stopping MediaRecorder:', e);
+          }
+        }
+        
+        // Clean up media stream
+        if (mediaRecorderRef.current.stream) {
+          console.log('[DEBUG] Stopping all media tracks');
+          mediaRecorderRef.current.stream.getTracks().forEach(track => {
+            console.log('[DEBUG] Stopping track:', track.kind);
+            track.stop();
+          });
+        }
+        
+        // Clear reference
+        mediaRecorderRef.current = null;
+      }
+      
+      // 2. Reset all recording state 
+      console.log('[DEBUG] Resetting all recording state values');
+      setIsRecording(false);
+      setIsStopDisabled(false);
+      setRecordingStartTime(null);
+      recordedChunksRef.current = [];
+    } catch (error) {
+      console.error('[DEBUG] Error during resource cleanup:', error);
+    } finally {
+      isCleaningUpRef.current = false;
+    }
+  }, []);
+
+  // Create an even more robust cleanup and recording management system
+  const cleanupRecording = useCallback(() => {
+    const currentId = recordingIdRef.current;
+    
+    // Stop the timer first
     setIsRecording(false);
     setIsStopDisabled(false);
     setRecordingStartTime(null);
     
-    if (stoppedDueToTabSwitchRef.current) {
-      toast.info("Recording stopped because you switched tabs");
-      stoppedDueToTabSwitchRef.current = false;
-      return;
-    }
-    
-    // Process recorded data
-    const chunks = recordedChunksRef.current;
-    
-    // Reset the chunks array immediately to avoid duplicate processing
-    recordedChunksRef.current = [];
-    
-    if (chunks.length === 0) {
-      console.warn('No recorded chunks found');
-      return;
-    }
-    
-    // Create audio blob from chunks
-    const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-    console.log('Created audio blob, size:', audioBlob.size);
-    
-    // Upload the recorded audio
-    if (assignment && user) {
+    // Then stop the MediaRecorder
+    if (mediaRecorderRef.current) {
       try {
-        setIsUploading(true);
-        toast.info("Uploading your recording...");
-        
-        const audioUrl = await uploadAudio(assignment.id, currentQuestionIndex, audioBlob);
-        console.log('Audio upload complete, URL:', audioUrl);
-        
-        if (audioUrl) {
-          // Immediately set the latest recording URL to ensure UI updates
-          setLatestRecordingUrl(audioUrl);
-          
-          // Create a new updated submission
-          const updatedSubmission = {
-            ...currentSubmission,
-            status: "in_progress" as const,
-            answers: currentSubmission ? currentSubmission.answers.map((answer, index) => {
-              if (index === currentQuestionIndex) {
-                return {
-                  ...answer,
-                  questionId: currentQuestionIndex,
-                  audioUrl: audioUrl
-                };
-              }
-              return answer;
-            }) : []
-          };
-          
-          // Set the updated submission state
-          setCurrentSubmission(updatedSubmission);
-          
-          // Then persist to the backend
-          try {
-            await updateSubmission(updatedSubmission);
-            toast.success("Recording saved successfully!");
-          } catch (err) {
-            console.error("Failed to update submission status:", err);
-            toast.error("Your recording was uploaded but we couldn't save it. Please try again.");
-          }
-        }
-      } catch (error) {
-        console.error("Error uploading audio:", error);
-        toast.error("Failed to upload recording. Please try again.");
-      } finally {
-        setIsUploading(false);
-      }
-    }
-  };
-
-  // Setup media recorder - simplified approach
-  useEffect(() => {
-    console.log('=== Setting up MediaRecorder ===');
-    let stream = null;
-    let cleanup = false;
-    
-    // Create and configure a new MediaRecorder
-    const setupRecorder = async () => {
-      try {
-        // Clean up any existing recorder first
-        if (stream) {
-          stream.getTracks().forEach(track => track.stop());
-        }
-        
-        // Request a fresh microphone stream
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
-        // Check if we've been cleaned up during the async operation
-        if (cleanup) return;
-        
-        const recorder = new MediaRecorder(stream);
-        
-        // Define data collection handler
-        recorder.addEventListener('dataavailable', (event) => {
-          if (event.data.size > 0) {
-            recordedChunksRef.current.push(event.data);
-          }
-        });
-        
-        // Define recording stop handler
-        recorder.addEventListener('stop', handleRecordingComplete);
-        
-        // Store the recorder reference
-        mediaRecorderRef.current = recorder;
-        
-      } catch (error) {
-        console.error('Error accessing microphone:', error);
-        toast.error('Could not access your microphone. Please check permissions.');
-      }
-    };
-    
-    // Initial setup
-    setupRecorder();
-    
-    // Cleanup function
-    return () => {
-      cleanup = true;
-      if (mediaRecorderRef.current?.state === 'recording') {
-        try {
+        // Stop it if it's recording
+        if (mediaRecorderRef.current.state === 'recording') {
           mediaRecorderRef.current.stop();
-        } catch (e) {
-          console.error("Error stopping recorder during cleanup:", e);
         }
+        
+        // Stop all tracks immediately
+        const tracks = mediaRecorderRef.current.stream?.getTracks() || [];
+        tracks.forEach(track => track.stop());
+        
+        // Clear the recorder reference
+        mediaRecorderRef.current = null;
+      } catch (error) {
+        console.error(`[DEBUG] Error in cleanup (ID: ${currentId}):`, error);
       }
-      
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-      
-      // Clear recording state
-      recordedChunksRef.current = [];
-    };
-  }, []); // Empty dependency array to only run once
-
-  // Simplify the toggleRecording function
-  const toggleRecording = useCallback(() => {
-    if (!mediaRecorderRef.current) {
-      toast.error('Microphone not ready. Please refresh the page.');
-      return;
     }
+    
+    // Reset chunks
+    recordedChunksRef.current = [];
+  }, []);
 
-    if (isRecording) {
-      // If we're recording, stop it
-      if (mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
-      setIsRecording(false);
-      setIsStopDisabled(false);
-      setRecordingStartTime(null);
-    } else {
-      // --- Start Recording ---
-      // Reset timer to the question's limit
-      const currentTimeLimit = questionTimeLimits[currentQuestionIndex] || DEFAULT_RECORDING_SECONDS;
-      setTimeLeft(currentTimeLimit);
+  // Create a completely separate function to start recording
+  const startRecording = useCallback(async () => {
+    const recordingId = Date.now();
+    recordingIdRef.current = recordingId;
+    
+    try {
+      cleanupRecording();
       
-      // Clear the latest recording URL
-      setLatestRecordingUrl(null);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
       
-      // Clear previous audio URL if any - DIRECT APPROACH
-      if (currentSubmission) {
-        const updatedSubmission = {
-          ...currentSubmission,
-          status: "in_progress" as const,
-          answers: currentSubmission.answers.map((answer, index) => {
-            if (index === currentQuestionIndex) {
-              return {
-                ...answer,
-                questionId: currentQuestionIndex,
-                audioUrl: ""
-              };
-            }
-            return answer;
-          })
-        };
+      mediaRecorderRef.current = recorder;
+      setRecorderState(recorder.state);
+      
+      recorder.ondataavailable = (event) => {
+        if (recordingId !== recordingIdRef.current) return;
         
-        // Update state
-        setCurrentSubmission(updatedSubmission);
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+      
+      recorder.onstop = async () => {
+        if (recordingId !== recordingIdRef.current) return;
         
-        // Persist to backend
-        updateSubmission(updatedSubmission)
-          .catch(err => console.error("Failed update:", err));
-      }
-      
-      // Clear recorded chunks
-      recordedChunksRef.current = [];
-      
-      // Begin with stop button disabled
-      setIsStopDisabled(true);
-      
-      // Set the recording start time
-      const newStartTime = Date.now();
-      setRecordingStartTime(newStartTime);
-      
-      // Start recording with a small delay
-      setTimeout(() => {
+        setRecorderState('stopped');
+        setIsRecording(false);
+        
+        const chunks = [...recordedChunksRef.current];
+        if (chunks.length === 0) return;
+        
         try {
-          mediaRecorderRef.current?.start(100);
+          setIsUploading(true);
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          const audioUrl = await uploadAudio(assignment.id, currentQuestionIndex, blob);
+          
+          if (audioUrl) {
+            const newSubmission = {
+              ...currentSubmission,
+              status: "in_progress" as const,
+              answers: currentSubmission.answers.map((answer, idx) => 
+                idx === currentQuestionIndex 
+                  ? { ...answer, questionId: currentQuestionIndex, audioUrl }
+                  : answer
+              )
+            };
+            
+            await updateSubmission(newSubmission);
+            setCurrentSubmission(newSubmission);
+            setAudioPlayerKey(prev => prev + 1);
+            toast.success("Recording saved successfully!");
+          }
         } catch (error) {
-          console.error('Error starting MediaRecorder:', error);
-          toast.error('Failed to start recording. Please try again.');
-          return;
+          console.error(`[DEBUG] Error processing recording (ID: ${recordingId}):`, error);
+          setLastError(error.message);
+          toast.error("Failed to save recording");
+        } finally {
+          setIsUploading(false);
         }
-        
-        setIsRecording(true);
-        toast.info(`Recording started. Minimum duration: ${MINIMUM_RECORDING_SECONDS} seconds.`);
-      }, 50);
+      };
+      
+      recorder.onerror = (error) => {
+        console.error(`[DEBUG] Recorder error (ID: ${recordingId}):`, error);
+        setLastError(error.type);
+        toast.error("Recording error occurred");
+        cleanupRecording();
+      };
+      
+      const timeLimit = questionTimeLimits[currentQuestionIndex] || DEFAULT_RECORDING_SECONDS;
+      setTimeLeft(timeLimit);
+      
+      recorder.start(100);
+      setRecorderState(recorder.state);
+      
+      setRecordingStartTime(Date.now());
+      setIsStopDisabled(true);
+      setIsRecording(true);
+      
+      toast.info(`Recording started. Minimum duration: ${MINIMUM_RECORDING_SECONDS} seconds.`);
+      return true;
+    } catch (error) {
+      console.error(`[DEBUG] Failed to start recording (ID: ${recordingId}):`, error);
+      setLastError(error.message);
+      toast.error("Could not start recording: " + error.message);
+      cleanupRecording();
+      return false;
     }
-  }, [isRecording, currentSubmission, currentQuestionIndex, updateSubmission, questionTimeLimits]);
+  }, [cleanupRecording, assignment, currentQuestionIndex, questionTimeLimits, uploadAudio]);
+
+  // Now create a completely separate function to stop recording
+  const stopRecording = useCallback(() => {
+    const currentId = recordingIdRef.current;
+    
+    setIsRecording(false);
+    setIsStopDisabled(false);
+    
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      try {
+        mediaRecorderRef.current.stop();
+        setRecorderState('stopping');
+      } catch (error) {
+        console.error(`[DEBUG] Error stopping recorder (ID: ${currentId}):`, error);
+        setLastError(error.message);
+        cleanupRecording();
+      }
+    } else {
+      cleanupRecording();
+    }
+  }, [cleanupRecording]);
+
+  // Simplify the toggle function to just call the right function
+  const toggleRecording = useCallback(async () => {
+    if (isUploading) return;
+    
+    if (isRecording) {
+      stopRecording();
+    } else {
+      if (audioUrls[currentQuestionIndex]) {
+        setIsUploading(true);
+        
+        try {
+          setCurrentSubmission(prev => {
+            if (!prev) return prev;
+            
+            const updatedAnswers = [...prev.answers];
+            updatedAnswers[currentQuestionIndex] = { 
+              ...updatedAnswers[currentQuestionIndex], 
+              audioUrl: "" 
+            };
+            
+            return {
+              ...prev,
+              status: "in_progress" as const,
+              answers: updatedAnswers
+            };
+          });
+          
+          if (currentSubmission && !currentSubmission.id.startsWith('temp_')) {
+            await updateSubmission({
+              ...currentSubmission,
+              status: "in_progress" as const,
+              answers: currentSubmission.answers.map((answer, idx) => 
+                idx === currentQuestionIndex ? {...answer, audioUrl: ""} : answer
+              )
+            });
+          }
+        } catch (error) {
+          console.error('[DEBUG] Failed to clear previous recording:', error);
+          toast.error("Failed to prepare for new recording");
+        } finally {
+          setIsUploading(false);
+        }
+      }
+      
+      startRecording();
+    }
+  }, [isRecording, isUploading, audioUrls, currentQuestionIndex, currentSubmission, updateSubmission, startRecording, stopRecording]);
+
+  // Modify timer effect to be safer
+  useEffect(() => {
+    if (!isRecording) return;
+    
+    let timer: number | undefined;
+    
+    const checkMinimumTime = () => {
+      if (!recordingStartTime) return;
+      
+      const elapsed = Date.now() - recordingStartTime;
+      if (elapsed >= MINIMUM_RECORDING_SECONDS * 1000 && isStopDisabled) {
+        setIsStopDisabled(false);
+      }
+    };
+    
+    if (timeLeft > 0) {
+      timer = window.setInterval(() => {
+        checkMinimumTime();
+        setTimeLeft(prev => Math.max(0, prev - 1));
+      }, 1000);
+    } else {
+      stopRecording();
+    }
+    
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [isRecording, timeLeft, recordingStartTime, isStopDisabled, stopRecording]);
+
+  // Add a cleanup effect for page navigation
+  useEffect(() => {
+    return () => {
+      console.log('[DEBUG] Component unmounting, cleaning up');
+      cleanupRecording();
+    };
+  }, [cleanupRecording]);
+
+  // Add event for tab visibility - stop recording when tab is hidden
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && isRecording) {
+        stoppedDueToTabSwitchRef.current = true;
+        stopRecording();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isRecording, stopRecording]);
 
   // Initialize submission
   useEffect(() => {
     if (!assignment || !user) return;
-    
+
     let submission = submissions.find(
       s => s.assignmentId === assignment.id && s.studentId === user.id && s.status !== "submitted"
     );
-    
+
     // If there's no in-progress submission, look for the newest one
     if (!submission) {
       const sortedSubmissions = [...submissions]
@@ -393,10 +497,10 @@ const StudentAssignmentDetails = () => {
           // Otherwise sort by submission ID (assuming higher IDs are newer)
           return parseInt(b.id) - parseInt(a.id);
         });
-      
+
       submission = sortedSubmissions[0];
     }
-    
+
     // If we still have no submission, create a temporary one
     if (!submission) {
       submission = {
@@ -408,7 +512,7 @@ const StudentAssignmentDetails = () => {
         answers: assignment.questions.map((_, index) => ({ questionId: index })),
       };
     }
-    
+
     // IMPORTANT: For retry attempts, ensure there are no audioUrls
     if (submission.status === "not_started") {
       submission = {
@@ -419,67 +523,9 @@ const StudentAssignmentDetails = () => {
         }))
       };
     }
-    
+
     setCurrentSubmission(submission);
   }, [assignment, user, submissions]);
-
-  // Recording timer: Handles countdown AND stop button disable logic
-  useEffect(() => {
-    let timer: number | undefined;
-
-    if (isRecording) {
-      // Verify recordingStartTime exists
-      if (recordingStartTime === null) {
-        // Create a new start time as recovery
-        const recoveryTime = Date.now();
-        setRecordingStartTime(recoveryTime);
-        
-        // Don't start timer until next render when recordingStartTime is set
-        return;
-      }
-      
-      // Calculate elapsed time
-      const now = Date.now();
-      const elapsed = now - recordingStartTime;
-      
-      // Check if we need to disable the stop button
-      if (elapsed < MINIMUM_RECORDING_SECONDS * 1000) {
-        setIsStopDisabled(true);
-      } else if (isStopDisabled) {
-        // Only update if currently disabled to avoid unnecessary renders
-        setIsStopDisabled(false);
-      }
-
-      // Handle the countdown timer
-      if (timeLeft > 0) {
-        // Start a new timer
-        timer = window.setInterval(() => {
-          setTimeLeft(prev => {
-            // Prevent going below zero
-            return Math.max(0, prev - 1);
-          });
-          
-          // Re-check elapsed time on each tick
-          const currentElapsed = recordingStartTime ? Date.now() - recordingStartTime : 0;
-          
-          // Enable stop button if minimum time reached
-          if (currentElapsed >= MINIMUM_RECORDING_SECONDS * 1000 && isStopDisabled) {
-            setIsStopDisabled(false);
-          }
-        }, 1000);
-      } else {
-        // Time has run out
-        setIsRecording(false);
-      }
-    }
-    
-    // Cleanup function
-    return () => {
-      if (timer) {
-        clearInterval(timer);
-      }
-    };
-  }, [isRecording, timeLeft, recordingStartTime, isStopDisabled]);
 
   // Close example dialog when changing questions
   useEffect(() => {
@@ -504,13 +550,13 @@ const StudentAssignmentDetails = () => {
 
   const submitAssignment = useCallback(async () => {
     if (!currentSubmission || !assignment) return;
-    
+
     const allAnswered = currentSubmission.answers.every(answer => answer.audioUrl);
     if (!allAnswered) {
       toast.error("Please answer all questions before submitting.");
       return;
     }
-    
+
     if (confirm("Are you sure you want to submit? You won't be able to make changes after.")) {
       try {
         const toastId = toast.loading("Submitting assignment...");
@@ -519,17 +565,17 @@ const StudentAssignmentDetails = () => {
           status: "submitted" as const,
           submittedAt: new Date().toISOString()
         };
-        
+
         // First update the submission status
         await updateSubmission(updatedSubmission);
-        
+
         // Then send the audio URLs to the analysis API
         try {
           // Get all the audio URLs from the answers
           const audioUrls = updatedSubmission.answers
             .map(answer => answer.audioUrl)
             .filter(url => url && url.trim() !== "") as string[];
-          
+
           // Only proceed if we have URLs to send
           if (audioUrls.length > 0) {
             // Send to analysis API
@@ -543,7 +589,7 @@ const StudentAssignmentDetails = () => {
           // Optionally notify the user that analysis might be delayed
           toast.warning("Your submission was saved, but audio analysis may be delayed.");
         }
-        
+
         toast.dismiss(toastId);
         toast.success("Assignment submitted successfully!");
         navigate("/student");
@@ -553,44 +599,12 @@ const StudentAssignmentDetails = () => {
       }
     }
   }, [currentSubmission, assignment, updateSubmission, navigate]);
-  
+
   const getProgressPercentage = useCallback(() => {
     if (!currentSubmission || !assignment) return 0;
     const answeredCount = currentSubmission.answers.filter(a => a.audioUrl).length;
     return (answeredCount / assignment.questions.length) * 100;
   }, [currentSubmission, assignment]);
-
-  // ----------------------------------------------------
-  // ———  ANALYSIS & GROUPING MEMOS  ———————————
-  const analysis = useMemo(() => {
-    if (!currentSubmission?.analysis) return null;
-    return typeof currentSubmission.analysis === "string"
-      ? JSON.parse(currentSubmission.analysis)
-      : currentSubmission.analysis;
-  }, [currentSubmission]);
-
-  // turn file_1, file_2, … into ordered arrays
-  const fileKeys = useMemo(
-    () => (analysis?.grammar_analysis ? Object.keys(analysis.grammar_analysis).sort() : []),
-    [analysis]
-  );
-  const grammarByFile = useMemo(
-    () => fileKeys.map((k) => analysis!.grammar_analysis[k]),
-    [analysis, fileKeys]
-  );
-  const vocabularyByFile = useMemo(
-    () => grammarByFile.map((g) => g.vocabulary_suggestions || {}),
-    [grammarByFile]
-  );
-  const lexicalByFile = useMemo(
-    () => grammarByFile.map((g) => g.lexical_resources || {}),
-    [grammarByFile]
-  );
-  const fluencyByFile = useMemo(
-    () => fileKeys.map((k) => analysis!.fluency_coherence_analysis[k] || {}),
-    [analysis, fileKeys]
-  );
-  // ----------------------------------------------------
 
   // Helper function to format time for display
   const formatTimeDisplay = useCallback((seconds: number): string => {
@@ -607,10 +621,23 @@ const StudentAssignmentDetails = () => {
     }
   }, []);
 
-  // Clear latestRecordingUrl when changing questions
+  // Add initialization effect
   useEffect(() => {
-    setLatestRecordingUrl(null);
-  }, [currentQuestionIndex]);
+    // Initialize MediaRecorder when component mounts
+    if (typeof window !== 'undefined' && window.MediaRecorder) {
+      // Request microphone access to ensure MediaRecorder is ready
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          // Create a temporary MediaRecorder instance
+          const tempRecorder = new MediaRecorder(stream);
+          // Stop all tracks immediately
+          stream.getTracks().forEach(track => track.stop());
+        })
+        .catch(error => {
+          console.error('[DEBUG] Error initializing MediaRecorder:', error);
+        });
+    }
+  }, []);
 
   if (loading || !assignment || !currentSubmission) {
     return (
@@ -631,20 +658,19 @@ const StudentAssignmentDetails = () => {
       </div>
     );
   }
-  
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <AppNavbar />
       <main className="flex-1 container py-8">
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           onClick={() => navigate("/student")}
           className="mb-6"
         >
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
         </Button>
-        
+
         <div className="mb-6">
           <h1 className="text-3xl font-bold mb-2">{assignment.title}</h1>
           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
@@ -664,7 +690,7 @@ const StudentAssignmentDetails = () => {
             )}
           </div>
         </div>
-        
+
         <div className="mb-8">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium">
@@ -676,157 +702,158 @@ const StudentAssignmentDetails = () => {
           </div>
           <Progress value={getProgressPercentage()} className="h-2" />
         </div>
-        
-        <Card className="mb-8">
-  <CardTitle className="w-full px-6 pt-6 flex items-center">
-    <span>Question {currentQuestionIndex + 1} of {assignment.questions.length}</span>
-  </CardTitle>
-  <CardContent className="flex flex-col gap-8 p-6">
-    {/* First section: Question text and optionally cue card */}
-    <div className="border rounded-lg p-6 bg-muted/40">
-      {shouldShowCueCard ? (
-        <h2 className="text-2xl font-bold mb-4">Cue Card</h2>
-      ) : (
-        <h2 className="text-2xl font-bold mb-4">Question</h2>
-      )}
-      
-      <p className="text-xl font-semibold mb-4">{currentQuestionData.question}</p>
-      
-      {shouldShowCueCard && hasExample && (
-        <div className="mt-4">
-          <ul className="list-disc pl-5 space-y-1">
-            {currentExample.split('\n').map((line, i) => (
-              line.trim() ? 
-                <li key={i} className="ml-0 text-lg">
-                  {line.trim().startsWith('- ') ? line.substring(2) : line.startsWith('-') ? line.substring(1) : line}
-                </li>
-              : null
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
 
-    {/* Second section: Recording UI in a separate container */}
-    <div className="border rounded-lg p-6 bg-muted/40 flex flex-col items-center">
-      {(audioUrls[currentQuestionIndex] || latestRecordingUrl) ? (
-        <div className="w-full">
-          <div className="mb-4 text-center text-green-600 font-medium flex items-center justify-center">
-            <Check className="mr-2 h-5 w-5" />
-            Recording Complete
-          </div>
-          <div key={`audio-element-${Date.now()}`}>
-            <audio 
-              src={audioUrls[currentQuestionIndex] || latestRecordingUrl} 
-              controls 
-              className="w-full"
-              preload="auto"
-            />
-          </div>
-          <div className="mt-4 text-center">
-            <Button 
-              onClick={toggleRecording}
-              disabled={isUploading}
-            >
-              {isUploading ? "Processing..." : "Record Again"}
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="text-center">
-          <div className="mb-4">
-            <Button
-              size="lg"
-              className={`rounded-full p-8 ${isRecording ? "bg-red-500 hover:bg-red-600" : ""}`}
-              disabled={isUploading || (isRecording && isStopDisabled)}
-              onClick={toggleRecording}
-              title={
-                isRecording && isStopDisabled 
-                  ? `Cannot stop for ${MINIMUM_RECORDING_SECONDS} seconds` 
-                  : (isRecording ? "Stop Recording" : "Start Recording")
-              }
-            >
-              {isRecording ? (
-                <Square className="h-8 w-8" />
+        <Card className="mb-8">
+          <CardTitle className="w-full px-6 pt-6 flex items-center">
+            <span>Question {currentQuestionIndex + 1} of {assignment.questions.length}</span>
+          </CardTitle>
+          <CardContent className="flex flex-col gap-8 p-6">
+            {/* First section: Question text and optionally cue card */}
+            <div className="border rounded-lg p-6 bg-muted/40">
+              {shouldShowCueCard ? (
+                <h2 className="text-2xl font-bold mb-4">Cue Card</h2>
               ) : (
-                <Mic className="h-8 w-8" />
+                <h2 className="text-2xl font-bold mb-4">Question</h2>
               )}
-            </Button>
-          </div>
-          
-          {isRecording ? (
-            <>
-              <div className="text-lg font-semibold mb-2">
-                Recording: {formatTimeDisplay(timeLeft)} left
-              </div>
-              {isStopDisabled && ( 
-                <div className="text-sm text-blue-500">
-                  Minimum recording time: {MINIMUM_RECORDING_SECONDS} seconds (cannot stop yet)
+
+              <p className="text-xl font-semibold mb-4">{currentQuestionData.question}</p>
+
+              {shouldShowCueCard && hasExample && (
+                <div className="mt-4">
+                  <ul className="list-disc pl-5 space-y-1">
+                    {currentExample.split('\n').map((line, i) => (
+                      line.trim() ?
+                        <li key={i} className="ml-0 text-lg">
+                          {line.trim().startsWith('- ') ? line.substring(2) : line.startsWith('-') ? line.substring(1) : line}
+                        </li>
+                        : null
+                    ))}
+                  </ul>
                 </div>
               )}
-            </>
-          ) : (
-            <div className="text-muted-foreground">
-              {isUploading ? "Processing..." : `Click to start recording (${formatTimeDisplay(timeLeft)} max)`}
             </div>
-          )}
-        </div>
-      )}
-    </div>
-  </CardContent>
 
-  <CardFooter className="flex justify-between">
-    <Button 
-      variant="outline" 
-      onClick={goToPreviousQuestion}
-      disabled={currentQuestionIndex === 0 || isUploading}
-    >
-      <ArrowLeft className="mr-2 h-4 w-4" /> Previous
-    </Button>
-    
-    {currentQuestionIndex < assignment.questions.length - 1 ? (
-      <Button 
-        onClick={goToNextQuestion}
-        disabled={!audioUrls[currentQuestionIndex] || isUploading}
-      >
-        Next <ArrowRight className="ml-2 h-4 w-4" />
-      </Button>
-    ) : (
-      <Button 
-        onClick={submitAssignment}
-        disabled={!currentSubmission.answers.every(answer => answer.audioUrl) || isUploading}
-      >
-        Submit Assignment <Check className="ml-2 h-4 w-4" />
-      </Button>
-    )}
-  </CardFooter>
-</Card>
-{analysis && grammarByFile.map((g, idx) => (
-  <Card key={idx} className="mb-6">
-    <CardHeader>
-      <CardTitle>Analysis for File {idx + 1}</CardTitle>
-    </CardHeader>
-    <CardContent>
-      {/* if g is somehow missing, show a fallback */}
-      {!g ? (
-        <p>No analysis available for this file.</p>
-      ) : (
-        <>
-          <p><strong>Pronunciation score:</strong> {g.overall_pronunciation_score}</p>
-          
-          <h4 className="mt-4 font-semibold">Grammar corrections</h4>
-          {g.grammar_corrections.length === 0
-            ? <p>—</p>
-            : <ul className="list-disc ml-5">
-                {g.grammar_corrections.map((c, i) => <li key={i}>{c}</li>)}
-              </ul>}
-          
-          {/* …and similarly guard vocabularyByFile[idx], lexicalByFile[idx], fluencyByFile[idx] */}
-        </>
-      )}
-    </CardContent>
-  </Card>
-))}
+            {/* Second section: Recording UI in a separate container */}
+            <div className="border rounded-lg p-6 bg-muted/40 flex flex-col items-center relative">
+              {/* Loading overlay - make this more prominent */}
+              {isUploading && (
+                <div className="absolute inset-0 bg-background/70 flex items-center justify-center rounded-lg z-10">
+                  <div className="bg-card p-6 rounded-md shadow-lg flex flex-col items-center">
+                    <div className="animate-pulse mb-3 h-10 w-10 bg-primary rounded-full"></div>
+                    <p className="text-center font-medium text-lg">Processing recording...</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Debug indicator for troubleshooting - you can remove this in production */}
+              <div className="absolute top-2 right-2 text-xs opacity-50">
+                {isRecording ? 'REC' : (isUploading ? 'UPLOAD' : 'IDLE')}:{audioPlayerKey}
+              </div>
+
+              {audioUrls[currentQuestionIndex] && audioUrls[currentQuestionIndex].trim() !== "" && !isRecording ? (
+                <div className="w-full">
+                  <div className="mb-4 text-center text-green-600 font-medium flex items-center justify-center">
+                    <Check className="mr-2 h-5 w-5" />
+                    Recording Complete
+                  </div>
+                  
+                  <audio 
+                    src={audioUrls[currentQuestionIndex]}
+                    controls
+                    className="w-full"
+                    key={`player-${audioPlayerKey}-${Date.now()}-${audioUrls[currentQuestionIndex]}`}
+                    onError={(e) => {
+                      console.error('[DEBUG] Audio playback error:', e);
+                      toast.error("Error playing recording");
+                    }}
+                    onCanPlay={() => console.log('[DEBUG] Audio can play')}
+                    preload="auto"
+                  />
+                  
+                  <div className="mt-4 text-center">
+                    <Button
+                      onClick={toggleRecording}
+                      disabled={isUploading}
+                    >
+                      Record Again
+                    </Button>
+                  </div>
+                  
+                  {lastError && (
+                    <div className="mt-2 p-2 bg-red-50 text-red-800 text-xs rounded border border-red-200">
+                      Last error: {lastError}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center">
+                  <div className="mb-4">
+                    <Button
+                      size="lg"
+                      className={`rounded-full p-8 ${isRecording ? "bg-red-500 hover:bg-red-600" : ""}`}
+                      disabled={isUploading || (isRecording && isStopDisabled)}
+                      onClick={toggleRecording}
+                      title={
+                        isRecording && isStopDisabled
+                          ? `Cannot stop for ${MINIMUM_RECORDING_SECONDS} seconds`
+                          : (isRecording ? "Stop Recording" : "Start Recording")
+                      }
+                    >
+                      {isRecording ? (
+                        <Square className="h-8 w-8" />
+                      ) : (
+                        <Mic className="h-8 w-8" />
+                      )}
+                    </Button>
+                  </div>
+
+                  {isRecording ? (
+                    <>
+                      <div className="text-lg font-semibold mb-2">
+                        Recording: {formatTimeDisplay(timeLeft)} left
+                      </div>
+                      {isStopDisabled && (
+                        <div className="text-sm text-blue-500">
+                          Minimum recording time: {MINIMUM_RECORDING_SECONDS} seconds (cannot stop yet)
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-muted-foreground">
+                      {isUploading ? "Processing..." : `Click to start recording (${formatTimeDisplay(timeLeft)} max)`}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </CardContent>
+
+          <CardFooter className="flex justify-between">
+            <Button
+              variant="outline"
+              onClick={goToPreviousQuestion}
+              disabled={currentQuestionIndex === 0 || isUploading}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+            </Button>
+
+            {currentQuestionIndex < assignment.questions.length - 1 ? (
+              <Button
+                onClick={goToNextQuestion}
+                disabled={!audioUrls[currentQuestionIndex] || isUploading}
+              >
+                Next <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                onClick={submitAssignment}
+                disabled={!currentSubmission.answers.every(answer => answer.audioUrl) || isUploading}
+              >
+                Submit Assignment <Check className="ml-2 h-4 w-4" />
+              </Button>
+            )}
+          </CardFooter>
+        </Card>
 
         <div className="flex justify-center mb-8">
           <div className="flex gap-2">
@@ -849,7 +876,7 @@ const StudentAssignmentDetails = () => {
           </div>
         </div>
 
-      
+
       </main>
     </div>
   );
