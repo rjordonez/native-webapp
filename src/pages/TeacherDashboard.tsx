@@ -353,9 +353,24 @@ const TeacherDashboard = () => {
                                         return status === tabValue;
                                       })
                                       .map((student) => {
-                                        const submission = assignmentSubmissions.find(
+                                        // Find all submissions for this student and assignment
+                                        const studentSubmissions = assignmentSubmissions.filter(
                                           s => s.studentId === student.id
                                         );
+                                        
+                                        // Sort by submittedAt date (most recent first) and filter for completed ones
+                                        const completedSubmissions = studentSubmissions
+                                          .filter(s => s.status === 'submitted')
+                                          .sort((a, b) => {
+                                            const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+                                            const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+                                            return dateB - dateA;
+                                          });
+                                        
+                                        // Get the most recent completed submission, or the most recent in-progress one if no completed
+                                        const submission = completedSubmissions[0] || 
+                                          studentSubmissions.find(s => s.status === 'in_progress') ||
+                                          studentSubmissions[0];
                                         
                                         return (
                                           <TableRow key={student.id}>
@@ -380,8 +395,8 @@ const TeacherDashboard = () => {
                                                 new Date(submission.submittedAt).toLocaleString() : '-'}
                                             </TableCell>
                                             <TableCell>
-  {submission?.grade != null ? submission.grade : "Pending"}
-</TableCell>
+                                              {submission?.grade != null ? submission.grade : "Pending"}
+                                            </TableCell>
                                             <TableCell>
                                               {submission?.status === 'submitted' && (
                                                 <Button 

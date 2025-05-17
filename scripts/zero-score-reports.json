@@ -1,0 +1,110 @@
+{
+  "generatedAt": "2025-05-17T04:41:24.885Z",
+  "totalPendingReports": 3,
+  "teachers": [
+    {
+      "teacherId": "61e4f35c-6716-4b4e-bffc-fc76d141d675",
+      "teacherName": "Linh Huong",
+      "pendingReports": [
+        {
+          "submissionId": 402,
+          "submissionUid": "unique_mx9vob7",
+          "studentName": "Huyen Duong",
+          "studentAnswers": [
+            {
+              "audioUrl": "https://zyaobehxpcwxlyljzknw.supabase.co/storage/v1/object/public/audio_recordings/2b0d194f-f1d3-4303-96ba-d37396e3534a/177/0_1745599654416.webm",
+              "questionId": 0
+            },
+            {
+              "audioUrl": "https://zyaobehxpcwxlyljzknw.supabase.co/storage/v1/object/public/audio_recordings/2b0d194f-f1d3-4303-96ba-d37396e3534a/177/1_1745598383148.webm",
+              "questionId": 1
+            },
+            {
+              "audioUrl": "https://zyaobehxpcwxlyljzknw.supabase.co/storage/v1/object/public/audio_recordings/2b0d194f-f1d3-4303-96ba-d37396e3534a/177/2_1745599961274.webm",
+              "questionId": 2
+            }
+          ],
+          "assignmentTitle": "Speaking 23.4",
+          "submittedAt": "2025-04-25T16:54:50.713+00:00",
+          "grade": 0
+        }
+      ]
+    },
+    {
+      "teacherId": "7c9609d5-4f8b-46fb-aa62-927962b70b41",
+      "teacherName": "Van Vu",
+      "pendingReports": [
+        {
+          "submissionId": 505,
+          "submissionUid": "unique_uvrf40u",
+          "studentName": "Anh Khoa",
+          "studentAnswers": [
+            {
+              "audioUrl": "https://zyaobehxpcwxlyljzknw.supabase.co/storage/v1/object/public/audio_recordings/482f1b38-2c77-4608-9ca9-0d2a6f789dbb/192/0_1746534243599.webm",
+              "questionId": 0
+            },
+            {
+              "audioUrl": "https://zyaobehxpcwxlyljzknw.supabase.co/storage/v1/object/public/audio_recordings/482f1b38-2c77-4608-9ca9-0d2a6f789dbb/192/1_1746533958499.webm",
+              "questionId": 1
+            },
+            {
+              "audioUrl": "https://zyaobehxpcwxlyljzknw.supabase.co/storage/v1/object/public/audio_recordings/482f1b38-2c77-4608-9ca9-0d2a6f789dbb/192/2_1746534319899.webm",
+              "questionId": 2
+            },
+            {
+              "audioUrl": "https://zyaobehxpcwxlyljzknw.supabase.co/storage/v1/object/public/audio_recordings/482f1b38-2c77-4608-9ca9-0d2a6f789dbb/192/3_1746534454003.webm",
+              "questionId": 3
+            }
+          ],
+          "assignmentTitle": "Homework Session 49 ",
+          "submittedAt": "2025-05-06T12:27:41.948+00:00",
+          "grade": 0
+        }
+      ]
+    },
+    {
+      "teacherId": "88ffc8e4-646c-4fd3-a2c1-72fa10248b53",
+      "teacherName": "Suzie Nguyen",
+      "pendingReports": [
+        {
+          "submissionId": 492,
+          "submissionUid": "unique_ibkcr90",
+          "studentName": "lvy",
+          "studentAnswers": [
+            {
+              "audioUrl": "https://zyaobehxpcwxlyljzknw.supabase.co/storage/v1/object/public/audio_recordings/60b24af2-9557-4912-a0e8-ab771771d9fd/196/0_1746445843692.webm",
+              "questionId": 0
+            },
+            {
+              "audioUrl": "https://zyaobehxpcwxlyljzknw.supabase.co/storage/v1/object/public/audio_recordings/60b24af2-9557-4912-a0e8-ab771771d9fd/196/1_1746447739057.webm",
+              "questionId": 1
+            },
+            {
+              "audioUrl": "https://zyaobehxpcwxlyljzknw.supabase.co/storage/v1/object/public/audio_recordings/60b24af2-9557-4912-a0e8-ab771771d9fd/196/2_1746447972396.webm",
+              "questionId": 2
+            },
+            {
+              "audioUrl": "https://zyaobehxpcwxlyljzknw.supabase.co/storage/v1/object/public/audio_recordings/60b24af2-9557-4912-a0e8-ab771771d9fd/196/3_1746448008854.webm",
+              "questionId": 3
+            },
+            {
+              "audioUrl": "https://zyaobehxpcwxlyljzknw.supabase.co/storage/v1/object/public/audio_recordings/60b24af2-9557-4912-a0e8-ab771771d9fd/196/4_1746448056730.webm",
+              "questionId": 4
+            },
+            {
+              "audioUrl": "https://zyaobehxpcwxlyljzknw.supabase.co/storage/v1/object/public/audio_recordings/60b24af2-9557-4912-a0e8-ab771771d9fd/196/5_1746448463450.webm",
+              "questionId": 5
+            },
+            {
+              "audioUrl": "https://zyaobehxpcwxlyljzknw.supabase.co/storage/v1/object/public/audio_recordings/60b24af2-9557-4912-a0e8-ab771771d9fd/196/6_1746455799583.webm",
+              "questionId": 6
+            }
+          ],
+          "assignmentTitle": "HOMEWORK UNIT 1 [HOMETOWN]",
+          "submittedAt": "2025-05-05T14:36:55.206+00:00",
+          "grade": 0
+        }
+      ]
+    }
+  ]
+}

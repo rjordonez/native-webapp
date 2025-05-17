@@ -1106,12 +1106,16 @@ const StudentSubmissionView = () => {
   }, [submission]);
   
   // Render the standard audio responses
-  // Render the standard audio responses
   const renderSubmissionView = () => (
     <div className="space-y-6">
       {assignment.questions.map((questionText, index) => {
         // Parse question data
         const questionData = parseQuestionData(questionText);
+        
+        // Log the audio URL for debugging
+        if (submission.answers[index]?.audioUrl) {
+          console.log(`Question ${index + 1} Audio URL:`, submission.answers[index].audioUrl);
+        }
         
         return (
           <Card key={index}>
