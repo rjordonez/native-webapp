@@ -6,7 +6,8 @@
   "scripts": {
     "check": "ts-node checkPendingReports.ts",
     "check:zero": "ts-node checkPendingReports.ts --0",
-    "start": "ts-node processTeacherReports.ts"
+    "start": "ts-node processTeacherReports.ts",
+    "check:missing-analysis": "ts-node checkMissingAnalysis.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

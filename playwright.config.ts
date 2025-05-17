@@ -21,6 +21,11 @@ export default defineConfig({
     
     /* Take screenshot on failure */
     screenshot: 'only-on-failure',
+
+    /* Mock microphone for recording tests */
+    launchOptions: {
+      args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream']
+    }
   },
   /* Configure projects for major browsers */
   projects: [

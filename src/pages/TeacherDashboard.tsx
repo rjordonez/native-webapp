@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useClass } from "@/context/ClassContext"; 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +24,7 @@ import {
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { classId } = useParams();
   const { 
     getClassesByUser, 
@@ -45,6 +46,28 @@ const TeacherDashboard = () => {
   const [submissionTotals, setSubmissionTotals] = useState({}); 
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [expandedAssignments, setExpandedAssignments] = useState({});
+  const [classCache, setClassCache] = useState({});
+
+  // Add effect to check for review navigation flag
+  useEffect(() => {
+    // Check if we're coming from review page via localStorage flag
+    const fromReview = localStorage.getItem('fromReview');
+    const reviewClassId = localStorage.getItem('reviewClassId');
+    
+    if (fromReview === 'true' && reviewClassId) {
+      // Clear the flags
+      localStorage.removeItem('fromReview');
+      localStorage.removeItem('reviewClassId');
+      
+      // If we're already on the class page for this class, do nothing
+      if (classId === reviewClassId) {
+        return;
+      }
+      
+      // Otherwise navigate directly to that class
+      navigate(`/teacher/class/${reviewClassId}`, { replace: true });
+    }
+  }, []);  // Empty dependency array ensures this only runs once on mount
 
   // Add this helper function after your state declarations
   const getUniqueSubmittersCount = (assignmentId) => {
@@ -66,9 +89,20 @@ const TeacherDashboard = () => {
   useEffect(() => {
     const loadSelectedClass = async () => {
       if (classId && !loading) {
+        // Check cache first
+        if (classCache[classId]) {
+          setSelectedClass(classCache[classId]);
+          return;
+        }
+
         const classData = await getClassById(classId);
         if (classData) {
           setSelectedClass(classData);
+          // Cache the class data
+          setClassCache(prev => ({
+            ...prev,
+            [classId]: classData
+          }));
         } else {
           navigate("/"); // Redirect to dashboard if class not found
         }
@@ -77,7 +111,7 @@ const TeacherDashboard = () => {
       }
     };
     loadSelectedClass();
-  }, [classId, loading, getClassById, navigate]);
+  }, [classId, loading, getClassById, navigate, classCache]);
 
   // Calculate submission totals for each class
   useEffect(() => {
@@ -105,6 +139,17 @@ const TeacherDashboard = () => {
       const loadDetails = async () => {
         setStudentsLoading(true);
         try {
+          // Check if we have cached details for this class
+          const cacheKey = `class_details_${selectedClass.id}`;
+          const cachedDetails = localStorage.getItem(cacheKey);
+          
+          if (cachedDetails) {
+            const parsedDetails = JSON.parse(cachedDetails);
+            setClassDetails(parsedDetails);
+            setStudentsLoading(false);
+            return;
+          }
+
           const assignments = getAssignmentsByClass(selectedClass.id);
           const students = await getStudentsByClass(selectedClass.id);
           
@@ -132,12 +177,17 @@ const TeacherDashboard = () => {
             })
           );
           
-          setSubmissions(allSubmissions.flat());
-          setClassDetails({
+          const details = {
             students,
             assignments,
             stats: assignmentStats
-          });
+          };
+
+          // Cache the details
+          localStorage.setItem(cacheKey, JSON.stringify(details));
+          
+          setSubmissions(allSubmissions.flat());
+          setClassDetails(details);
         } catch (error) {
           console.error("Error loading class details:", error);
         } finally {
@@ -148,6 +198,20 @@ const TeacherDashboard = () => {
       loadDetails();
     }
   }, [selectedClass]); 
+
+  // Clear cache when navigating away from a class
+  useEffect(() => {
+    if (!classId) {
+      // Clear the class cache when going back to dashboard
+      setClassCache({});
+      // Clear localStorage cache
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('class_details_')) {
+          localStorage.removeItem(key);
+        }
+      });
+    }
+  }, [classId]);
 
   const handleDeleteAssignment = async () => {
     if (!assignmentToDelete) return;
@@ -192,6 +256,38 @@ const TeacherDashboard = () => {
     return ["All", ...Array.from(statuses)];
   };
 
+  // Handle navigation back
+  const handleBackNavigation = () => {
+    if (location.state?.from === 'review') {
+      // Use this direct URL change to bypass React Router's transitions
+      window.location.href = `/teacher/class/${selectedClass.id}`;
+      return;
+    } else {
+      // Clear cache before navigating back
+      setClassCache({});
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('class_details_')) {
+          localStorage.removeItem(key);
+        }
+      });
+      // Navigate back to the dashboard
+      navigate('/teacher', { replace: true });
+    }
+  };
+
+  // if we have a :classId but still loading or no selectedClass yet, show loader
+  if (classId && (studentsLoading || !selectedClass)) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <AppNavbar />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-gray-600">Loading class details…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // once selectedClass is set, show your detail UI
   if (selectedClass) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
@@ -200,7 +296,7 @@ const TeacherDashboard = () => {
           <Button 
             variant="link" 
             className="px-0 mb-4" 
-            onClick={() => setSelectedClass(null)}
+            onClick={handleBackNavigation}
           >
             ← Back to Dashboard
           </Button>
@@ -402,7 +498,13 @@ const TeacherDashboard = () => {
                                                 <Button 
                                                   variant="outline" 
                                                   size="sm"
-                                                  onClick={() => navigate(`/teacher/submission/${submission.id}`)}
+                                                  onClick={() => navigate(`/teacher/submission/${submission.id}`, { 
+                                                    state: { 
+                                                      from: 'dashboard',
+                                                      classId: selectedClass.id,
+                                                      className: selectedClass.name
+                                                    } 
+                                                  })}
                                                 >
                                                   Review
                                                 </Button>

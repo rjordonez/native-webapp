@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
 test.setTimeout(60_000);
 
+// Configure video recording for this test
+test.use({
+  video: 'on'  // This will record video for all test runs, not just failures
+});
+
 test('recording', async ({ page, context }) => {
   console.log('Starting test with microphone permissions...');
   await context.grantPermissions(['microphone'], { origin: 'http://localhost:8080' });

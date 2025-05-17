@@ -1,7 +1,7 @@
 import React from "react";
 import { useAuth } from "@/context/AuthContext";
 import posthog from 'posthog-js';
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useClass } from "@/context/ClassContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -902,6 +902,7 @@ const VoiceTutorReport = ({ data, studentName = "Student" }: { data: AnalysisRep
 const StudentSubmissionView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, profile } = useAuth();
   const { assignments, submissions, createNewSubmission } = useClass();
   
@@ -1255,8 +1256,21 @@ const StudentSubmissionView = () => {
       <div className="min-h-screen flex flex-col bg-background">
         <AppNavbar />
         <main className="flex-1 container py-8">
-          <Button variant="outline" onClick={() => navigate("/student")} className="mb-6">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
+          <Button variant="outline" onClick={() => {
+            if (location.state?.from === 'dashboard') {
+              if (location.state?.classId) {
+                // Set a flag in localStorage to indicate we're coming from review
+                localStorage.setItem('fromReview', 'true');
+                localStorage.setItem('reviewClassId', location.state.classId);
+                navigate(`/teacher/class/${location.state.classId}`, { replace: true });
+              } else {
+                navigate('/teacher', { replace: true });
+              }
+            } else {
+              navigate("/student", { replace: true });
+            }
+          }} className="mb-6">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Classroom
           </Button>
 
           <div className="mb-6">
@@ -1310,8 +1324,21 @@ const StudentSubmissionView = () => {
     <div className="min-h-screen flex flex-col bg-background">
       <AppNavbar />
       <main className="flex-1 container py-8">
-        <Button variant="outline" onClick={() => navigate("/student")} className="mb-6">
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
+        <Button variant="outline" onClick={() => {
+          if (location.state?.from === 'dashboard') {
+            if (location.state?.classId) {
+              // Set a flag in localStorage to indicate we're coming from review
+              localStorage.setItem('fromReview', 'true');
+              localStorage.setItem('reviewClassId', location.state.classId);
+              navigate(`/teacher/class/${location.state.classId}`, { replace: true });
+            } else {
+              navigate('/teacher', { replace: true });
+            }
+          } else {
+            navigate("/student", { replace: true });
+          }
+        }} className="mb-6">
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Classroom
         </Button>
 
         <div className="mb-6">
