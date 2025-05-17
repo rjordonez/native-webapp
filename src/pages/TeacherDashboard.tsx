@@ -146,6 +146,7 @@ const TeacherDashboard = () => {
           if (cachedDetails) {
             const parsedDetails = JSON.parse(cachedDetails);
             setClassDetails(parsedDetails);
+            setSubmissions(parsedDetails.submissions || []);
             setStudentsLoading(false);
             return;
           }
@@ -177,16 +178,20 @@ const TeacherDashboard = () => {
             })
           );
           
+          const flattenedSubmissions = allSubmissions.flat();
+          
           const details = {
             students,
             assignments,
-            stats: assignmentStats
+            stats: assignmentStats,
+            submissions: flattenedSubmissions,
+            lastUpdated: new Date().toISOString()
           };
 
           // Cache the details
           localStorage.setItem(cacheKey, JSON.stringify(details));
           
-          setSubmissions(allSubmissions.flat());
+          setSubmissions(flattenedSubmissions);
           setClassDetails(details);
         } catch (error) {
           console.error("Error loading class details:", error);
@@ -198,6 +203,19 @@ const TeacherDashboard = () => {
       loadDetails();
     }
   }, [selectedClass]); 
+
+  // Add cache invalidation when data changes
+  useEffect(() => {
+    if (selectedClass && classDetails) {
+      const cacheKey = `class_details_${selectedClass.id}`;
+      const updatedDetails = {
+        ...classDetails,
+        submissions,
+        lastUpdated: new Date().toISOString()
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(updatedDetails));
+    }
+  }, [submissions, classDetails, selectedClass]);
 
   // Clear cache when navigating away from a class
   useEffect(() => {
@@ -212,6 +230,24 @@ const TeacherDashboard = () => {
       });
     }
   }, [classId]);
+
+  // Add cache refresh on window focus
+  useEffect(() => {
+    const handleFocus = () => {
+      if (selectedClass) {
+        const cacheKey = `class_details_${selectedClass.id}`;
+        const cachedDetails = localStorage.getItem(cacheKey);
+        if (cachedDetails) {
+          const parsedDetails = JSON.parse(cachedDetails);
+          setClassDetails(parsedDetails);
+          setSubmissions(parsedDetails.submissions || []);
+        }
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [selectedClass]);
 
   const handleDeleteAssignment = async () => {
     if (!assignmentToDelete) return;
